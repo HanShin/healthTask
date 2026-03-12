@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbf6ee"/>
+      <stop offset="100%" stop-color="#edf3ef"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#508a77"/>
+      <stop offset="100%" stop-color="#21473b"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="520" fill="url(#bg)"/>
+  <rect x="0" y="420" width="800" height="100" fill="#dbe7dd"/>
+  <ellipse cx="392" cy="164" rx="28" ry="24" fill="#e7b18b"/>
+  <rect x="356" y="188" width="74" height="88" rx="30" fill="url(#shirt)"/>
+  <rect x="360" y="268" width="68" height="34" rx="16" fill="#17382f"/>
+  <path d="M364 214L344 188" fill="none" stroke="#e7b18b" stroke-width="18" stroke-linecap="round"/>
+  <path d="M344 188V148" fill="none" stroke="#e7b18b" stroke-width="16" stroke-linecap="round"/>
+  <path d="M420 214L438 188" fill="none" stroke="#e7b18b" stroke-width="18" stroke-linecap="round"/>
+  <path d="M438 188V148" fill="none" stroke="#e7b18b" stroke-width="16" stroke-linecap="round"/>
+  <path d="M392 146v-18" fill="none" stroke="#495c55" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="392" cy="118" r="18" fill="#db6c3f"/>
+  <path d="M376 302L314 352" fill="none" stroke="#17382f" stroke-width="24" stroke-linecap="round"/>
+  <path d="M314 352L270 404" fill="none" stroke="#e7b18b" stroke-width="20" stroke-linecap="round"/>
+  <path d="M406 302L476 352" fill="none" stroke="#17382f" stroke-width="24" stroke-linecap="round"/>
+  <path d="M476 352L520 404" fill="none" stroke="#e7b18b" stroke-width="20" stroke-linecap="round"/>
+  <ellipse cx="264" cy="408" rx="24" ry="10" fill="#203932"/>
+  <ellipse cx="526" cy="408" rx="24" ry="10" fill="#203932"/>
+  <text x="54" y="84" font-family="Arial, sans-serif" font-size="34" fill="#17382f">Goblet Squat</text>
+  <text x="54" y="124" font-family="Arial, sans-serif" font-size="18" fill="#687369">Hold close • chest tall • knees track</text>
+</svg>

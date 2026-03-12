@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#faf5ec"/>
+      <stop offset="100%" stop-color="#edf3ef"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4d8a76"/>
+      <stop offset="100%" stop-color="#22483d"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="520" fill="url(#bg)"/>
+  <rect x="0" y="420" width="800" height="100" fill="#dbe7dd"/>
+  <path d="M608 112V410" fill="none" stroke="#5f6d69" stroke-width="18" stroke-linecap="round"/>
+  <path d="M608 112H406" fill="none" stroke="#5f6d69" stroke-width="18" stroke-linecap="round"/>
+  <path d="M406 122H304" fill="none" stroke="#db6c3f" stroke-width="14" stroke-linecap="round"/>
+  <ellipse cx="360" cy="200" rx="28" ry="24" fill="#e7b18b"/>
+  <rect x="334" y="220" width="102" height="48" rx="24" fill="url(#shirt)"/>
+  <rect x="346" y="262" width="54" height="34" rx="16" fill="#17382f"/>
+  <path d="M346 236L310 176" fill="none" stroke="#e7b18b" stroke-width="18" stroke-linecap="round"/>
+  <path d="M310 176L306 124" fill="none" stroke="#e7b18b" stroke-width="16" stroke-linecap="round"/>
+  <path d="M424 236L470 176" fill="none" stroke="#e7b18b" stroke-width="18" stroke-linecap="round"/>
+  <path d="M470 176L474 124" fill="none" stroke="#e7b18b" stroke-width="16" stroke-linecap="round"/>
+  <path d="M372 296L332 402" fill="none" stroke="#17382f" stroke-width="22" stroke-linecap="round"/>
+  <path d="M396 296L446 402" fill="none" stroke="#17382f" stroke-width="22" stroke-linecap="round"/>
+  <ellipse cx="324" cy="408" rx="24" ry="10" fill="#203932"/>
+  <ellipse cx="454" cy="408" rx="24" ry="10" fill="#203932"/>
+  <rect x="314" y="306" width="132" height="14" rx="7" fill="#203932"/>
+  <text x="54" y="84" font-family="Arial, sans-serif" font-size="34" fill="#17382f">Lat Pulldown</text>
+  <text x="54" y="124" font-family="Arial, sans-serif" font-size="18" fill="#687369">Pull to upper chest • keep ribs down</text>
+</svg>

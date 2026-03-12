@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#fbf5ec"/>
+      <stop offset="100%" stop-color="#edf3ef"/>
+    </linearGradient>
+    <linearGradient id="shirt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4d8975"/>
+      <stop offset="100%" stop-color="#22473c"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="520" fill="url(#bg)"/>
+  <rect x="0" y="420" width="800" height="100" fill="#dbe7dd"/>
+  <rect x="540" y="256" width="122" height="18" rx="9" fill="#203932"/>
+  <ellipse cx="382" cy="162" rx="28" ry="24" fill="#e7b18b"/>
+  <rect x="352" y="184" width="72" height="96" rx="28" fill="url(#shirt)"/>
+  <rect x="360" y="270" width="64" height="34" rx="16" fill="#17382f"/>
+  <path d="M354 206L304 212" fill="none" stroke="#e7b18b" stroke-width="18" stroke-linecap="round"/>
+  <path d="M420 206L498 214" fill="none" stroke="#e7b18b" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="518" cy="214" r="16" fill="#db6c3f"/>
+  <path d="M376 304L334 384" fill="none" stroke="#17382f" stroke-width="24" stroke-linecap="round"/>
+  <path d="M334 384L280 410" fill="none" stroke="#e7b18b" stroke-width="20" stroke-linecap="round"/>
+  <path d="M404 304L486 322" fill="none" stroke="#17382f" stroke-width="24" stroke-linecap="round"/>
+  <path d="M486 322L562 272" fill="none" stroke="#e7b18b" stroke-width="20" stroke-linecap="round"/>
+  <ellipse cx="270" cy="412" rx="22" ry="10" fill="#203932"/>
+  <ellipse cx="570" cy="272" rx="22" ry="10" fill="#203932"/>
+  <path d="M312 214H506" fill="none" stroke="#6fab8d" stroke-width="8" stroke-dasharray="10 10"/>
+  <text x="54" y="84" font-family="Arial, sans-serif" font-size="34" fill="#17382f">Split Squat</text>
+  <text x="54" y="124" font-family="Arial, sans-serif" font-size="18" fill="#687369">Front foot pressure • vertical drop</text>
+</svg>

@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520">
+  <rect width="800" height="520" fill="#f7f3ea"/>
+  <rect x="0" y="420" width="800" height="100" fill="#dce7de"/>
+  <circle cx="370" cy="160" r="22" fill="#f0b86f"/>
+  <path d="M352 182l64 66" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M416 248l114-42" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M530 206q26-36 54 0v44q-28 20-54 0z" fill="#db6c3f"/>
+  <path d="M416 248l-20 96" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M378 216l-90 100" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M396 344l-64 68" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M396 344l78 66" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M288 210h250" fill="none" stroke="#6fab8d" stroke-width="10" stroke-dasharray="10 12"/>
+  <text x="54" y="84" font-family="Arial, sans-serif" font-size="34" fill="#17382f">Kettlebell Swing</text>
+  <text x="54" y="124" font-family="Arial, sans-serif" font-size="18" fill="#687369">Hip snap • float the bell • neutral spine</text>
+</svg>

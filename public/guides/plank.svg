@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 520">
+  <rect width="800" height="520" fill="#f7f3ea"/>
+  <rect x="0" y="420" width="800" height="100" fill="#dce7de"/>
+  <circle cx="522" cy="250" r="22" fill="#f0b86f"/>
+  <path d="M500 264H300" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M300 264l-68 38" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M420 264l54 86" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M326 264l-54 86" fill="none" stroke="#1e2a26" stroke-width="18" stroke-linecap="round"/>
+  <path d="M534 240l58 2" fill="none" stroke="#6fab8d" stroke-width="10" stroke-dasharray="10 12"/>
+  <text x="54" y="84" font-family="Arial, sans-serif" font-size="34" fill="#17382f">Plank</text>
+  <text x="54" y="124" font-family="Arial, sans-serif" font-size="18" fill="#687369">Straight line • brace the core</text>
+</svg>
