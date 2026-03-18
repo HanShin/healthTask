@@ -29,7 +29,6 @@ export function ExerciseGuideModal({ exercise, onClose }: ExerciseGuideModalProp
         >
         <div className="modal-sheet__header">
           <div>
-            <div className="eyebrow">Guide</div>
             <h2>{exercise.name}</h2>
             <div className="chip-row guide-meta-row">
               <span className="chip">{getExerciseKindLabel(exercise)}</span>

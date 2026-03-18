@@ -58,7 +58,10 @@ function buildRoutineFromTemplate(template: RoutineTemplate): Routine {
   };
 }
 
-export async function createProfile(input: SetupInput): Promise<void> {
+export async function createProfile(
+  input: SetupInput,
+  availableTemplates: RoutineTemplate[] = routineTemplates
+): Promise<void> {
   const timestamp = new Date().toISOString();
 
   const profile: Profile = {
@@ -78,7 +81,11 @@ export async function createProfile(input: SetupInput): Promise<void> {
   const templatesToInstall =
     input.starterMode === 'recommended'
       ? getStarterTemplateIds(input)
-          .map((templateId) => routineTemplates.find((template) => template.id === templateId))
+          .map(
+            (templateId) =>
+              availableTemplates.find((template) => template.id === templateId) ??
+              routineTemplates.find((template) => template.id === templateId)
+          )
           .filter((template): template is RoutineTemplate => Boolean(template))
           .map((template) => buildRoutineFromTemplate(template))
       : [];
@@ -140,8 +147,13 @@ export async function saveRoutine(input: {
   });
 }
 
-export async function installTemplate(templateId: string): Promise<void> {
-  const template = routineTemplates.find((item) => item.id === templateId);
+export async function installTemplate(
+  templateId: string,
+  availableTemplates: RoutineTemplate[] = routineTemplates
+): Promise<void> {
+  const template =
+    availableTemplates.find((item) => item.id === templateId) ??
+    routineTemplates.find((item) => item.id === templateId);
 
   if (!template) {
     throw new Error('템플릿을 찾을 수 없습니다.');
@@ -222,7 +234,7 @@ export async function deleteWorkoutSession(sessionId: string): Promise<void> {
   await db.sessions.delete(sessionId);
 }
 
-export async function exportBackup(): Promise<string> {
+export async function buildBackupPayload(): Promise<BackupPayload> {
   const [profile, exercises, routines, sessions] = await Promise.all([
     db.profile.get('local-profile'),
     db.exercises.toArray(),
@@ -238,12 +250,16 @@ export async function exportBackup(): Promise<string> {
     sessions
   };
 
+  return payload;
+}
+
+export async function exportBackup(): Promise<string> {
+  const payload = await buildBackupPayload();
+
   return JSON.stringify(payload, null, 2);
 }
 
-export async function importBackup(rawText: string): Promise<void> {
-  const payload = JSON.parse(rawText) as BackupPayload;
-
+export async function restoreBackupPayload(payload: BackupPayload): Promise<void> {
   await db.transaction('rw', db.profile, db.exercises, db.routines, db.sessions, async () => {
     await db.profile.clear();
     await db.exercises.clear();
@@ -258,6 +274,12 @@ export async function importBackup(rawText: string): Promise<void> {
     await db.routines.bulkPut(payload.routines);
     await db.sessions.bulkPut(payload.sessions);
   });
+}
+
+export async function importBackup(rawText: string): Promise<void> {
+  const payload = JSON.parse(rawText) as BackupPayload;
+
+  await restoreBackupPayload(payload);
 }
 
 export async function resetAllData(exercises: Exercise[]): Promise<void> {

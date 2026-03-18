@@ -1,9 +1,11 @@
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState';
 import { SectionCard } from '../../components/SectionCard';
 import { db } from '../../lib/db';
 import { buildWeekStrip, formatKoreanDate } from '../../lib/date';
+import { loadHolidayMap } from '../../lib/holidays';
 import { getSessionStatusLabel } from '../../lib/sessionStatus';
 import { getHistoryInsights, getSessionsThisWeek, getWeeklyCompletion, getCurrentStreak } from '../../lib/stats';
 
@@ -13,14 +15,30 @@ export function HistoryPage() {
   const exercises = useLiveQuery(() => db.exercises.toArray(), []) ?? [];
   const exerciseMap = new Map(exercises.map((exercise) => [exercise.id, exercise.name]));
   const weekStrip = buildWeekStrip();
+  const weekStripRangeKey = weekStrip.map((day) => day.dateKey).join('|');
   const weeklyDates = new Set(getSessionsThisWeek(sessions).map((session) => session.sessionDate));
   const insights = getHistoryInsights(sessions);
   const weeklyCompletion = getWeeklyCompletion(profile ?? null, sessions);
   const streak = getCurrentStreak(sessions);
+  const [holidayMap, setHolidayMap] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let active = true;
+
+    void loadHolidayMap(weekStrip.map((day) => day.dateKey)).then((nextHolidayMap) => {
+      if (active) {
+        setHolidayMap(nextHolidayMap);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [weekStripRangeKey]);
 
   return (
     <div className="page-stack">
-      <SectionCard eyebrow="Overview" title="이번 주 기록">
+      <SectionCard title="이번 주 기록">
         <div className="stat-grid">
           <div className="stat-pill">
             <span>완료 세션</span>
@@ -40,7 +58,8 @@ export function HistoryPage() {
           {weekStrip.map((day) => (
             <div
               key={day.dateKey}
-              className={`week-strip__day${weeklyDates.has(day.dateKey) ? ' is-filled' : ''}${day.isToday ? ' is-today' : ''}`}
+              className={`week-strip__day week-strip__day--${day.dayKey}${holidayMap[day.dateKey] ? ' is-holiday' : ''}${weeklyDates.has(day.dateKey) ? ' is-filled' : ''}${day.isToday ? ' is-today' : ''}`}
+              title={holidayMap[day.dateKey] ?? undefined}
             >
               <span>{day.label}</span>
               <strong>{day.dateKey.slice(-2)}</strong>
@@ -49,7 +68,7 @@ export function HistoryPage() {
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Insight" title="기록에서 읽힌 흐름">
+      <SectionCard title="기록에서 읽힌 흐름">
         <div className="stack-list">
           {insights.map((insight) => (
             <div key={insight} className="insight-row">
@@ -59,7 +78,7 @@ export function HistoryPage() {
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Archive" title="세션 기록">
+      <SectionCard title="세션 기록">
         {sessions.length > 0 ? (
           <div className="stack-list">
             {sessions.map((session) => (

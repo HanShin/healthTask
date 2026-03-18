@@ -458,7 +458,7 @@ export function SessionPage() {
         </p>
       </section>
 
-      <SectionCard eyebrow="Session info" title="기록 기본값">
+      <SectionCard title="기록 기본값">
         <div className="field-grid">
           <label className="field">
             <span>운동 날짜</span>
@@ -477,7 +477,6 @@ export function SessionPage() {
       </SectionCard>
 
       <SectionCard
-        eyebrow="Workout"
         title="세트별 입력"
         action={
           <button className="ghost-button" type="button" onClick={openExercisePicker}>
@@ -671,7 +670,6 @@ export function SessionPage() {
           >
             <div className="modal-sheet__header">
               <div>
-                <div className="eyebrow">Session add-on</div>
                 <h2>이번 기록에 운동 추가</h2>
                 <p className="muted-copy">여기서 추가한 운동은 이번 세션 기록에 바로 반영됩니다.</p>
               </div>

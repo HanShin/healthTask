@@ -11,6 +11,7 @@ export type ExerciseKind = 'strength' | 'running';
 export type RoutineKind = ExerciseKind | 'hybrid';
 export type WorkoutSessionStatus = 'completed' | 'partial' | 'skipped';
 export type RoutineSource = 'manual' | 'template';
+export type RoutineDifficulty = 'beginner' | 'intermediate' | 'advanced';
 
 export interface GuideResource {
   kind: 'video' | 'reference';
@@ -147,6 +148,7 @@ export interface RoutineTemplate {
   name: string;
   blurb: string;
   focus: string;
+  difficulty?: RoutineDifficulty;
   targets: string[];
   benefits: string[];
   items: RoutineDraftItem[];
@@ -156,6 +158,7 @@ export interface SetupInput {
   workoutTypes: ExerciseKind[];
   workoutsPerWeek: number;
   starterMode: 'recommended' | 'blank';
+  starterDifficulty: RoutineDifficulty;
 }
 
 export interface BackupPayload {

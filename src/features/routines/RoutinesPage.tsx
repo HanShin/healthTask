@@ -3,7 +3,6 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { EmptyState } from '../../components/EmptyState';
 import { ExerciseGuideModal } from '../../components/ExerciseGuideModal';
 import { SectionCard } from '../../components/SectionCard';
-import { routineTemplates } from '../../data/catalog';
 import { db } from '../../lib/db';
 import {
   getExerciseEquipmentLabel,
@@ -16,12 +15,14 @@ import {
 } from '../../lib/exercise';
 import { paceToSpeedKmh, speedToPaceMinPerKm } from '../../lib/format';
 import { createId } from '../../lib/id';
+import { useRecommendationTemplates } from '../../lib/recommendedTemplates';
 import { deleteRoutine, installTemplate, saveRoutine } from '../../lib/repository';
 import { getOrderedRoutines } from '../../lib/routineSequence';
-import type { Exercise, Routine, RoutineDraftItem } from '../../lib/types';
+import type { Exercise, Routine, RoutineDifficulty, RoutineDraftItem, RoutineTemplate } from '../../lib/types';
 
 type EquipmentFilter = 'all' | 'dumbbell' | 'kettlebell' | 'freeweight';
 type MuscleFilter = 'all' | 'running' | NonNullable<Exercise['muscleGroup']>;
+type TemplateDifficultyFilter = 'all' | RoutineDifficulty;
 
 type EditorItem =
   | {
@@ -114,14 +115,52 @@ const muscleFilterOptions: Array<{ value: MuscleFilter; label: string }> = [
   { value: 'running', label: '러닝' }
 ];
 
+const templateDifficultyOptions: Array<{ value: TemplateDifficultyFilter; label: string }> = [
+  { value: 'all', label: '전체' },
+  { value: 'beginner', label: '입문' },
+  { value: 'intermediate', label: '중급' },
+  { value: 'advanced', label: '고강도' }
+];
+
+const templateDifficultyLabelMap: Record<RoutineDifficulty, string> = {
+  beginner: '입문',
+  intermediate: '중급',
+  advanced: '고강도'
+};
+
+const templateDifficultyDescriptionMap: Record<RoutineDifficulty, string> = {
+  beginner: '동작 적응과 루틴 정착에 초점을 둔 템플릿',
+  intermediate: '볼륨과 난도가 어느 정도 올라간 템플릿',
+  advanced: '강도나 기술 요구가 상대적으로 높은 템플릿'
+};
+
+function getTemplateDifficulty(template: RoutineTemplate): RoutineDifficulty {
+  return template.difficulty ?? 'beginner';
+}
+
 interface RoutineEditorProps {
   exercises: Exercise[];
+  templates: RoutineTemplate[];
+  isRefreshingTemplates: boolean;
+  lastTemplateSyncAt: string | null;
+  templateSyncError: string | null;
+  onRefreshTemplates: () => Promise<void>;
   initialRoutine?: Routine | null;
   sequenceNumber: number;
   onClose: () => void;
 }
 
-function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: RoutineEditorProps) {
+function RoutineEditor({
+  exercises,
+  templates,
+  isRefreshingTemplates,
+  lastTemplateSyncAt,
+  templateSyncError,
+  onRefreshTemplates,
+  initialRoutine,
+  sequenceNumber,
+  onClose
+}: RoutineEditorProps) {
   const [name, setName] = useState(initialRoutine?.name ?? '');
   const [items, setItems] = useState<EditorItem[]>(initialRoutine ? toEditorItems(initialRoutine.items) : []);
   const [search, setSearch] = useState('');
@@ -130,6 +169,7 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
   const [isSaving, setIsSaving] = useState(false);
   const [installingTemplateId, setInstallingTemplateId] = useState<string | null>(null);
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const [templateDifficultyFilter, setTemplateDifficultyFilter] = useState<TemplateDifficultyFilter>('all');
   const [guideExerciseId, setGuideExerciseId] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
   const exerciseLookup = new Map(exercises.map((exercise) => [exercise.id, exercise]));
@@ -178,6 +218,17 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
   const groupedExerciseEntries = Object.entries(groupedExercises).sort((left, right) =>
     left[0].localeCompare(right[0], 'ko')
   );
+  const filteredTemplates = templates.filter((template) =>
+    templateDifficultyFilter === 'all'
+      ? true
+      : getTemplateDifficulty(template) === templateDifficultyFilter
+  );
+  const groupedTemplateEntries = (['beginner', 'intermediate', 'advanced'] as RoutineDifficulty[])
+    .map((difficulty) => [
+      difficulty,
+      filteredTemplates.filter((template) => getTemplateDifficulty(template) === difficulty)
+    ] as const)
+    .filter(([, matchedTemplates]) => matchedTemplates.length > 0);
 
   useEffect(() => {
     setName(initialRoutine?.name ?? '');
@@ -185,6 +236,7 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
     setSearch('');
     setEquipmentFilter('freeweight');
     setMuscleFilter('all');
+    setTemplateDifficultyFilter('all');
     setIsTemplatePickerOpen(false);
     setGuideExerciseId(null);
   }, [initialRoutine]);
@@ -238,7 +290,7 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
     setInstallingTemplateId(templateId);
 
     try {
-      await installTemplate(templateId);
+      await installTemplate(templateId, templates);
       onClose();
     } finally {
       setInstallingTemplateId(null);
@@ -279,7 +331,6 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
       <section className="modal-sheet" aria-modal="true" role="dialog">
         <div className="modal-sheet__header">
           <div>
-            <div className="eyebrow">{initialRoutine ? 'Edit routine' : 'New routine'}</div>
             <h2>{initialRoutine ? '루틴 수정' : '루틴 만들기'}</h2>
           </div>
           <button className="ghost-button" type="button" onClick={onClose}>
@@ -295,14 +346,36 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
                 <p className="muted-copy">
                   새 루틴을 직접 짜기 전에, 템플릿으로 바로 시작한 뒤 내 스타일에 맞게 수정할 수도 있어요.
                 </p>
+                <p className="muted-copy">
+                  {templateSyncError
+                    ? templateSyncError
+                    : lastTemplateSyncAt
+                      ? `마지막 갱신 ${new Intl.DateTimeFormat('ko-KR', {
+                          month: 'long',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        }).format(new Date(lastTemplateSyncAt))}`
+                      : '앱이 열려 있는 동안 추천 템플릿을 주기적으로 다시 확인합니다.'}
+                </p>
               </div>
-              <button
-                className="ghost-button template-launcher__button"
-                type="button"
-                onClick={() => setIsTemplatePickerOpen(true)}
-              >
-                추천 템플릿 보기
-              </button>
+              <div className="button-row">
+                <button
+                  className="ghost-button template-launcher__button"
+                  type="button"
+                  onClick={() => setIsTemplatePickerOpen(true)}
+                >
+                  추천 템플릿 보기
+                </button>
+                <button
+                  className="ghost-button ghost-button--compact"
+                  type="button"
+                  onClick={() => void onRefreshTemplates()}
+                  disabled={isRefreshingTemplates}
+                >
+                  {isRefreshingTemplates ? '갱신 중...' : '지금 갱신'}
+                </button>
+              </div>
             </section>
           ) : null}
 
@@ -666,43 +739,89 @@ function RoutineEditor({ exercises, initialRoutine, sequenceNumber, onClose }: R
             >
               <div className="modal-sheet__header">
                 <div>
-                  <div className="eyebrow">Templates</div>
                   <h2>추천 템플릿</h2>
                 </div>
-                <button className="ghost-button" type="button" onClick={() => setIsTemplatePickerOpen(false)}>
-                  닫기
-                </button>
+                <div className="button-row">
+                  <button
+                    className="ghost-button ghost-button--compact"
+                    type="button"
+                    onClick={() => void onRefreshTemplates()}
+                    disabled={isRefreshingTemplates}
+                  >
+                    {isRefreshingTemplates ? '갱신 중...' : '새로고침'}
+                  </button>
+                  <button className="ghost-button" type="button" onClick={() => setIsTemplatePickerOpen(false)}>
+                    닫기
+                  </button>
+                </div>
               </div>
 
               <div className="stack-list">
-                {routineTemplates.map((template) => (
-                  <article key={template.id} className="template-card">
-                    <div>
-                      <h3>{template.name}</h3>
-                      <p>{template.blurb}</p>
-                      <div className="template-card__meta">
-                        <p>
-                          <strong>부위</strong> {template.targets.join(' · ')}
-                        </p>
-                        <p>
-                          <strong>효과</strong> {template.benefits.join(' · ')}
-                        </p>
-                      </div>
-                      <div className="chip-row">
-                        <span className="chip">{template.focus}</span>
-                        <span className="chip">{template.items.length}개 운동</span>
-                      </div>
-                    </div>
+                <p className="muted-copy">
+                  {templateSyncError
+                    ? `원격 갱신 실패: ${templateSyncError}`
+                    : lastTemplateSyncAt
+                      ? `최신 확인 ${new Intl.DateTimeFormat('ko-KR', {
+                          month: 'long',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        }).format(new Date(lastTemplateSyncAt))}`
+                      : '기본 추천 템플릿을 표시하고 있습니다.'}
+                </p>
+                <div className="chip-row">
+                  {templateDifficultyOptions.map((option) => (
                     <button
-                      className="ghost-button"
+                      key={option.value}
                       type="button"
-                      onClick={() => handleTemplateInstall(template.id)}
-                      disabled={installingTemplateId === template.id}
+                      className={`chip chip--button${templateDifficultyFilter === option.value ? ' is-active' : ''}`}
+                      onClick={() => setTemplateDifficultyFilter(option.value)}
                     >
-                      {installingTemplateId === template.id ? '추가 중...' : '이 템플릿으로 시작'}
+                      {option.label}
                     </button>
-                  </article>
-                ))}
+                  ))}
+                </div>
+                {groupedTemplateEntries.length > 0 ? (
+                  groupedTemplateEntries.map(([difficulty, matchedTemplates]) => (
+                    <section key={difficulty} className="stack-list">
+                      <div className="field">
+                        <span>{templateDifficultyLabelMap[difficulty]}</span>
+                        <p className="muted-copy">{templateDifficultyDescriptionMap[difficulty]}</p>
+                      </div>
+                      {matchedTemplates.map((template) => (
+                        <article key={template.id} className="template-card">
+                          <div>
+                            <h3>{template.name}</h3>
+                            <p>{template.blurb}</p>
+                            <div className="template-card__meta">
+                              <p>
+                                <strong>부위</strong> {template.targets.join(' · ')}
+                              </p>
+                              <p>
+                                <strong>효과</strong> {template.benefits.join(' · ')}
+                              </p>
+                            </div>
+                            <div className="chip-row">
+                              <span className="chip">{templateDifficultyLabelMap[getTemplateDifficulty(template)]}</span>
+                              <span className="chip">{template.focus}</span>
+                              <span className="chip">{template.items.length}개 운동</span>
+                            </div>
+                          </div>
+                          <button
+                            className="ghost-button"
+                            type="button"
+                            onClick={() => handleTemplateInstall(template.id)}
+                            disabled={installingTemplateId === template.id}
+                          >
+                            {installingTemplateId === template.id ? '추가 중...' : '이 템플릿으로 시작'}
+                          </button>
+                        </article>
+                      ))}
+                    </section>
+                  ))
+                ) : (
+                  <p className="muted-copy">선택한 난이도에 맞는 추천 템플릿이 아직 없습니다.</p>
+                )}
               </div>
             </section>
           </div>
@@ -716,6 +835,13 @@ export function RoutinesPage() {
   const exercises = useLiveQuery(() => db.exercises.toArray(), []) ?? [];
   const routineRecords = useLiveQuery(() => db.routines.toArray(), []) ?? [];
   const routines = getOrderedRoutines(routineRecords);
+  const {
+    templates,
+    isRefreshing: isRefreshingTemplates,
+    lastSyncedAt,
+    error: templateSyncError,
+    refreshTemplates
+  } = useRecommendationTemplates();
   const exerciseLookup = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const [editorTarget, setEditorTarget] = useState<Routine | null | undefined>(undefined);
   const [guideExerciseId, setGuideExerciseId] = useState<string | null>(null);
@@ -743,7 +869,6 @@ export function RoutinesPage() {
   return (
     <div className="page-stack">
       <SectionCard
-        eyebrow="Studio"
         title="내 루틴"
         action={
           <button
@@ -825,6 +950,11 @@ export function RoutinesPage() {
       {editorTarget !== undefined ? (
         <RoutineEditor
           exercises={exercises}
+          templates={templates}
+          isRefreshingTemplates={isRefreshingTemplates}
+          lastTemplateSyncAt={lastSyncedAt}
+          templateSyncError={templateSyncError}
+          onRefreshTemplates={refreshTemplates}
           initialRoutine={editorTarget}
           sequenceNumber={editorSequenceNumber}
           onClose={() => setEditorTarget(undefined)}

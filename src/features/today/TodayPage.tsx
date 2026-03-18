@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../../components/EmptyState';
@@ -7,6 +7,7 @@ import { SectionCard } from '../../components/SectionCard';
 import { db } from '../../lib/db';
 import { buildWeekStrip, formatKoreanDate } from '../../lib/date';
 import { formatDistance, formatDuration, formatWeight } from '../../lib/format';
+import { loadHolidayMap } from '../../lib/holidays';
 import { getTodayRecommendation } from '../../lib/recommendations';
 import { getWeeklyRoutineSequence } from '../../lib/routineSequence';
 import { getSessionStatusLabel } from '../../lib/sessionStatus';
@@ -61,11 +62,13 @@ export function TodayPage() {
   const weeklyCompletion = getWeeklyCompletion(profile ?? null, sessions);
   const streak = getCurrentStreak(sessions);
   const weekStrip = buildWeekStrip();
+  const weekStripRangeKey = weekStrip.map((day) => day.dateKey).join('|');
   const weeklySessionDates = new Set(getSessionsThisWeek(sessions).map((session) => session.sessionDate));
   const recentSessions = getRecentSessions(sessions);
   const exerciseMap = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const routineMap = new Map(routines.map((routine) => [routine.id, routine.name]));
   const [guideExerciseId, setGuideExerciseId] = useState<string | null>(null);
+  const [holidayMap, setHolidayMap] = useState<Record<string, string>>({});
   const routineSequence = getWeeklyRoutineSequence({
     profile: profile ?? null,
     routines,
@@ -78,6 +81,20 @@ export function TodayPage() {
     sessions,
     exercises
   });
+
+  useEffect(() => {
+    let active = true;
+
+    void loadHolidayMap(weekStrip.map((day) => day.dateKey)).then((nextHolidayMap) => {
+      if (active) {
+        setHolidayMap(nextHolidayMap);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [weekStripRangeKey]);
 
   if (!profile) {
     return null;
@@ -109,12 +126,13 @@ export function TodayPage() {
         </div>
       </section>
 
-      <SectionCard eyebrow="This week" title="주간 리듬">
+      <SectionCard title="주간 리듬">
         <div className="week-strip">
           {weekStrip.map((day) => (
             <div
               key={day.dateKey}
-              className={`week-strip__day${weeklySessionDates.has(day.dateKey) ? ' is-filled' : ''}${day.isToday ? ' is-today' : ''}`}
+              className={`week-strip__day week-strip__day--${day.dayKey}${holidayMap[day.dateKey] ? ' is-holiday' : ''}${weeklySessionDates.has(day.dateKey) ? ' is-filled' : ''}${day.isToday ? ' is-today' : ''}`}
+              title={holidayMap[day.dateKey] ?? undefined}
             >
               <span>{day.label}</span>
               <strong>{day.dateKey.slice(-2)}</strong>
@@ -123,13 +141,12 @@ export function TodayPage() {
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Coach note" title="오늘 추천">
+      <SectionCard title="오늘 추천">
         <p className="lead-copy">{recommendation}</p>
       </SectionCard>
 
       {todayRoutine ? (
         <SectionCard
-          eyebrow="Today"
           title={
             routineSequence.nextSequenceNumber
               ? `이번 주 ${routineSequence.nextSequenceNumber}번째 운동`
@@ -191,7 +208,7 @@ export function TodayPage() {
         />
       )}
 
-      <SectionCard eyebrow="Recent log" title="최근 기록">
+      <SectionCard title="최근 기록">
         {recentSessions.length > 0 ? (
           <div className="stack-list">
             {recentSessions.map((session) => {

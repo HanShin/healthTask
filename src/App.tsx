@@ -3,7 +3,9 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
 import { db } from './lib/db';
+import { RecommendationTemplatesProvider } from './lib/recommendedTemplates';
 import { initializeDatabase } from './lib/seed';
+import { ensurePersistentStorage } from './lib/storage';
 import { HistoryPage } from './features/history/HistoryPage';
 import { SessionDetailPage } from './features/history/SessionDetailPage';
 import { RoutinesPage } from './features/routines/RoutinesPage';
@@ -20,7 +22,7 @@ function AppRoutes({ ready }: { ready: boolean }) {
     return (
       <div className="app-shell">
         <div className="loading-screen">
-          <div className="loading-screen__badge">Booting Hansin Log</div>
+          <div className="loading-screen__badge">앱 준비 중</div>
           <h1>모바일 루틴 앱을 준비 중입니다.</h1>
           <p>운동 사전과 로컬 데이터베이스를 불러오고 있어요.</p>
         </div>
@@ -60,6 +62,8 @@ export default function App() {
     let active = true;
 
     void initializeDatabase().then(() => {
+      void ensurePersistentStorage();
+
       if (active) {
         setReady(true);
       }
@@ -72,7 +76,9 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <AppRoutes ready={ready} />
+      <RecommendationTemplatesProvider>
+        <AppRoutes ready={ready} />
+      </RecommendationTemplatesProvider>
     </BrowserRouter>
   );
 }

@@ -74,7 +74,7 @@ export function SessionDetailPage() {
         </div>
       </section>
 
-      <SectionCard eyebrow="Detail" title="운동별 결과">
+      <SectionCard title="운동별 결과">
         <div className="stack-list">
           {session.items.map((item) => (
             <article key={item.id} className="session-card">
@@ -108,7 +108,7 @@ export function SessionDetailPage() {
       </SectionCard>
 
       {session.memo ? (
-        <SectionCard eyebrow="Memo" title="메모">
+        <SectionCard title="메모">
           <p className="lead-copy">{session.memo}</p>
         </SectionCard>
       ) : null}

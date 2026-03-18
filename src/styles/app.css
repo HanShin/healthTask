@@ -26,6 +26,12 @@
   --radius-xl: 28px;
   --radius-lg: 22px;
   --radius-md: 16px;
+  --device-max-width: 440px;
+  --device-max-height: 956px;
+  --shell-inline: clamp(14px, 3.6vw, 18px);
+  --safe-top: max(16px, env(safe-area-inset-top));
+  --safe-bottom: max(16px, env(safe-area-inset-bottom));
+  --nav-offset: calc(86px + var(--safe-bottom) + 12px);
 }
 
 * {
@@ -40,6 +46,7 @@ body,
 
 body {
   margin: 0;
+  min-width: 320px;
 }
 
 a {
@@ -77,10 +84,11 @@ select:focus {
 
 .app-shell {
   position: relative;
-  max-width: 480px;
-  min-height: 100vh;
+  width: min(100%, var(--device-max-width));
+  max-width: var(--device-max-width);
+  min-height: 100dvh;
   margin: 0 auto;
-  padding: 24px 18px 110px;
+  padding: calc(var(--safe-top) + 6px) var(--shell-inline) var(--nav-offset);
 }
 
 .app-shell__ornament {
@@ -107,7 +115,9 @@ select:focus {
 }
 
 .app-header {
-  padding: 10px 4px 20px;
+  position: relative;
+  z-index: 2;
+  padding: 10px 2px 18px;
 }
 
 .app-header__badge,
@@ -134,11 +144,14 @@ select:focus {
   margin: 0;
   font-family: 'Space Grotesk', sans-serif;
   letter-spacing: -0.04em;
+  line-height: 1.02;
+  text-wrap: balance;
 }
 
 .app-header h1 {
   margin-top: 0.8rem;
   font-size: clamp(2.25rem, 7vw, 3rem);
+  max-inline-size: 10ch;
 }
 
 .app-header p,
@@ -148,6 +161,8 @@ select:focus {
 .loading-screen p {
   margin: 0;
   color: var(--muted);
+  line-height: 1.48;
+  text-wrap: pretty;
 }
 
 .app-content,
@@ -193,7 +208,7 @@ select:focus {
 }
 
 .hero-card--compact {
-  padding: 20px;
+  padding: 18px;
 }
 
 .hero-card p,
@@ -206,8 +221,23 @@ select:focus {
 }
 
 .hero-card h2 {
-  margin-top: 0.85rem;
-  font-size: clamp(1.9rem, 6vw, 2.5rem);
+  margin-top: 0.75rem;
+  max-inline-size: 11ch;
+  font-size: clamp(1.9rem, 8.5vw, 2.5rem);
+  line-height: 0.96;
+  font-variant-numeric: tabular-nums;
+}
+
+.hero-card > p {
+  margin-top: 0.5rem;
+  max-inline-size: min(30ch, 100%);
+  font-size: clamp(0.98rem, 3.9vw, 1.08rem);
+  line-height: 1.42;
+}
+
+.hero-card__label {
+  width: fit-content;
+  max-width: 100%;
 }
 
 .panel,
@@ -241,6 +271,7 @@ select:focus {
 
 .panel__copy {
   flex: 1 1 200px;
+  max-inline-size: 28rem;
 }
 
 .panel__action {
@@ -306,6 +337,7 @@ select:focus {
   display: block;
   font-family: 'Space Grotesk', sans-serif;
   font-size: 1.05rem;
+  text-wrap: balance;
 }
 
 .week-strip {
@@ -328,12 +360,39 @@ select:focus {
   color: var(--ink);
 }
 
+.week-strip__day--sun span,
+.week-strip__day--sun strong {
+  color: #c44a4a;
+}
+
+.week-strip__day.is-holiday span,
+.week-strip__day.is-holiday strong {
+  color: #c44a4a;
+}
+
+.week-strip__day--sat span,
+.week-strip__day--sat strong {
+  color: #3f67c7;
+}
+
 .week-strip__day.is-filled {
   background: rgba(219, 108, 63, 0.14);
 }
 
 .week-strip__day.is-today {
   outline: 1px solid rgba(23, 56, 47, 0.22);
+}
+
+.week-strip__day.is-filled.week-strip__day--sun {
+  background: rgba(196, 74, 74, 0.14);
+}
+
+.week-strip__day.is-filled.is-holiday {
+  background: rgba(196, 74, 74, 0.14);
+}
+
+.week-strip__day.is-filled.week-strip__day--sat {
+  background: rgba(63, 103, 199, 0.14);
 }
 
 .lead-copy {
@@ -491,6 +550,8 @@ select:focus {
 .editor-card h3 {
   margin: 0;
   font-size: 1rem;
+  line-height: 1.2;
+  text-wrap: balance;
 }
 
 .routine-card__header p,
@@ -691,6 +752,8 @@ select:focus {
 
 .session-history-card__exercise strong {
   font-size: 0.98rem;
+  line-height: 1.24;
+  text-wrap: balance;
 }
 
 .session-history-card__value {
@@ -770,6 +833,13 @@ select:focus {
   color: var(--ink);
 }
 
+.primary-button:disabled,
+.ghost-button:disabled {
+  opacity: 0.56;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
 .ghost-button--compact {
   min-height: 40px;
   padding: 0.72rem 0.8rem;
@@ -796,17 +866,18 @@ select:focus {
 .bottom-nav {
   position: fixed;
   left: 50%;
-  bottom: 14px;
+  bottom: calc(var(--safe-bottom) + 10px);
   transform: translateX(-50%);
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  width: min(448px, calc(100vw - 20px));
+  width: min(calc(var(--device-max-width) - 14px), calc(100vw - 18px));
   padding: 10px;
   border-radius: 28px;
   background: rgba(12, 23, 19, 0.88);
   box-shadow: 0 16px 40px rgba(12, 23, 19, 0.28);
   backdrop-filter: blur(18px);
+  z-index: 4;
 }
 
 .bottom-nav__item {
@@ -846,14 +917,17 @@ select:focus {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 18px;
+  padding:
+    calc(var(--safe-top) + 18px)
+    18px
+    calc(var(--safe-bottom) + 18px);
   background: rgba(12, 23, 19, 0.32);
   backdrop-filter: blur(10px);
 }
 
 .modal-sheet {
-  width: min(480px, 100%);
-  max-height: calc(100vh - 36px);
+  width: min(calc(var(--device-max-width) - 4px), 100%);
+  max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 36px);
   padding: 20px;
   overflow: auto;
 }
@@ -959,9 +1033,43 @@ select:focus {
   color: #7d442c;
 }
 
+.notice-card {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid transparent;
+}
+
+.notice-card strong,
+.notice-card p,
 .guide-warning strong,
 .guide-warning p {
   margin: 0;
+}
+
+.notice-card--neutral {
+  background: rgba(23, 56, 47, 0.06);
+  border-color: rgba(23, 56, 47, 0.08);
+  color: var(--ink);
+}
+
+.notice-card--safe {
+  background: rgba(46, 106, 88, 0.12);
+  border-color: rgba(46, 106, 88, 0.08);
+  color: var(--accent);
+}
+
+.notice-card--caution {
+  background: rgba(247, 209, 139, 0.35);
+  border-color: rgba(136, 85, 27, 0.12);
+  color: #88551b;
+}
+
+.notice-card--danger {
+  background: rgba(219, 108, 63, 0.12);
+  border-color: rgba(125, 68, 44, 0.12);
+  color: #7d442c;
 }
 
 .resource-grid {
@@ -1174,7 +1282,43 @@ select:focus {
   padding: 0 16px 16px;
 }
 
-@media (max-width: 540px) {
+@media (min-width: 520px) {
+  body {
+    padding: 18px 0;
+  }
+
+  .app-shell {
+    min-height: min(calc(100dvh - 36px), var(--device-max-height));
+    padding-top: calc(var(--safe-top) + 12px);
+    border-radius: 40px;
+    border: 1px solid rgba(23, 56, 47, 0.12);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.08)),
+      linear-gradient(180deg, rgba(255, 250, 242, 0.44), rgba(255, 250, 242, 0.18));
+    box-shadow:
+      0 30px 80px rgba(23, 56, 47, 0.18),
+      inset 0 1px 0 rgba(255, 255, 255, 0.42);
+  }
+
+  .app-header {
+    padding-top: 8px;
+  }
+
+  .app-content {
+    position: relative;
+    z-index: 2;
+  }
+}
+
+@media (max-width: 430px) {
+  .app-header h1 {
+    max-inline-size: 8ch;
+  }
+
+  .hero-card > p {
+    max-inline-size: 100%;
+  }
+
   .stat-grid,
   .field-grid,
   .toggle-grid {

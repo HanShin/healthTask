@@ -67,6 +67,7 @@ export function isDateWithinCurrentWeek(dateString: string, referenceDate = new 
 }
 
 export function buildWeekStrip(referenceDate = new Date()): Array<{
+  dayKey: DayOfWeek;
   label: string;
   dateKey: string;
   isToday: boolean;
@@ -77,6 +78,7 @@ export function buildWeekStrip(referenceDate = new Date()): Array<{
     const cursor = new Date(weekStart);
     cursor.setDate(weekStart.getDate() + index);
     return {
+      dayKey: day,
       label: dayLabels[day],
       dateKey: toDateInput(cursor),
       isToday: toDateInput(cursor) === toDateInput(referenceDate)

@@ -86,7 +86,7 @@ export function AppShell({ children }: AppShellProps) {
       <div className="app-shell__ornament app-shell__ornament--bottom" />
 
       <header className="app-header">
-        <div className="app-header__badge">개인 운동 기록 앱</div>
+        <div className="app-header__badge">한신의 운동기록</div>
         <h1>{headerCopy.title}</h1>
         <p>{headerCopy.subtitle}</p>
       </header>

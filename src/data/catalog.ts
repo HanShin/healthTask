@@ -2,6 +2,7 @@ import type {
   Exercise,
   ExerciseGuide,
   GuideResource,
+  RoutineDifficulty,
   RoutineDraftItem,
   RoutineTemplate,
   SetupInput
@@ -37,6 +38,17 @@ function strengthItem(
     restSeconds,
     note
   };
+}
+
+function bodyweightItem(
+  exerciseId: string,
+  order: number,
+  sets: number,
+  targetReps: number,
+  restSeconds = 60,
+  note?: string
+): RoutineDraftItem {
+  return strengthItem(exerciseId, order, sets, targetReps, 0, restSeconds, note);
 }
 
 function runningItem(
@@ -219,6 +231,36 @@ const guidePresets = {
       )
     ]
   },
+  pushUp: {
+    headline: '손바닥으로 바닥을 밀어내며 몸통 전체를 하나의 판처럼 곧게 유지합니다.',
+    cues: ['손은 어깨보다 살짝 넓게', '가슴과 엉덩이가 함께 내려가기', '정점에서 견갑을 끝까지 밀어내기'],
+    warning: '허리가 꺾이거나 턱만 먼저 떨어지지 않게 주의하세요.'
+  },
+  pullUp: {
+    headline: '가슴을 열고 견갑을 먼저 끌어내린 뒤 팔꿈치를 아래로 당깁니다.',
+    cues: ['매달린 시작 자세에서 어깨를 끌어내리기', '턱만 들지 말고 가슴을 바 쪽으로 가져가기', '하강도 반동 없이 천천히'],
+    warning: '반동으로 턱만 넘기려 하면 어깨와 팔꿈치 부담이 커질 수 있습니다.'
+  },
+  bodyweightSquat: {
+    headline: '발 전체로 바닥을 누르며 고관절과 무릎을 함께 접어 자연스럽게 앉습니다.',
+    cues: ['무릎과 발끝 방향 맞추기', '하단에서도 가슴 길게 유지', '일어날 때 발바닥 중앙으로 밀기'],
+    warning: '발뒤꿈치가 뜨거나 허리가 말리는 깊이까지 무리하지 마세요.'
+  },
+  pikePushUp: {
+    headline: '엉덩이를 높게 든 상태에서 정수리 방향으로 몸을 내렸다가 어깨로 밀어 올립니다.',
+    cues: ['손으로 바닥을 강하게 밀기', '팔꿈치는 몸통에서 너무 벌리지 않기', '내릴 때 시선은 손 사이 바닥'],
+    warning: '어깨가 아프다면 가동범위를 줄이고 엉덩이 높이를 먼저 맞추세요.'
+  },
+  dip: {
+    headline: '어깨를 아래로 고정한 채 상체를 살짝 세우고 팔꿈치를 뒤로 접습니다.',
+    cues: ['하강 전에 견갑을 먼저 안정화', '상완이 바닥과 평행해질 정도까지만', '올라올 때 반동 없이 삼두와 가슴으로 밀기'],
+    warning: '어깨 앞쪽에 날카로운 통증이 느껴지면 깊이를 줄이거나 다른 동작으로 바꾸세요.'
+  },
+  hangingRaise: {
+    headline: '철봉에 매달린 상태에서 반동을 줄이고 복부 힘으로 무릎 또는 다리를 끌어올립니다.',
+    cues: ['견갑을 살짝 끌어내려 몸통 흔들림 줄이기', '골반을 말아 복부 수축 만들기', '내릴 때도 천천히 제어하기'],
+    warning: '몸을 크게 흔들며 반복하지 말고 통제 가능한 범위에서 진행하세요.'
+  },
   kettlebellSwing: {
     headline: '팔로 들어 올리는 것이 아니라 힙힌지와 엉덩이 폭발력으로 케틀벨을 보냅니다.',
     cues: ['케틀벨을 다리 사이 깊게 보내기', '정점에서 엉덩이와 복부를 강하게 잠그기', '팔은 고리처럼 느슨하게 유지'],
@@ -345,6 +387,15 @@ export const exerciseCatalog: Exercise[] = [
     isCustom: false
   }),
   exercise({
+    id: 'push-up',
+    name: '푸시업',
+    kind: 'strength',
+    muscleGroup: 'chest',
+    equipment: 'bodyweight',
+    guide: guidePresets.pushUp,
+    isCustom: false
+  }),
+  exercise({
     id: 'seated-row',
     name: '시티드 로우',
     kind: 'strength',
@@ -395,6 +446,33 @@ export const exerciseCatalog: Exercise[] = [
     muscleGroup: 'back',
     equipment: 'kettlebell',
     guide: guidePresets.dumbbellRow,
+    isCustom: false
+  }),
+  exercise({
+    id: 'inverted-row',
+    name: '인버티드 로우',
+    kind: 'strength',
+    muscleGroup: 'back',
+    equipment: 'bodyweight',
+    guide: guidePresets.pullUp,
+    isCustom: false
+  }),
+  exercise({
+    id: 'pull-up',
+    name: '풀업',
+    kind: 'strength',
+    muscleGroup: 'back',
+    equipment: 'bodyweight',
+    guide: guidePresets.pullUp,
+    isCustom: false
+  }),
+  exercise({
+    id: 'chin-up',
+    name: '친업',
+    kind: 'strength',
+    muscleGroup: 'back',
+    equipment: 'bodyweight',
+    guide: guidePresets.pullUp,
     isCustom: false
   }),
   exercise({
@@ -518,6 +596,33 @@ export const exerciseCatalog: Exercise[] = [
     isCustom: false
   }),
   exercise({
+    id: 'bodyweight-squat',
+    name: '맨몸 스쿼트',
+    kind: 'strength',
+    muscleGroup: 'legs',
+    equipment: 'bodyweight',
+    guide: guidePresets.bodyweightSquat,
+    isCustom: false
+  }),
+  exercise({
+    id: 'bodyweight-reverse-lunge',
+    name: '맨몸 리버스 런지',
+    kind: 'strength',
+    muscleGroup: 'legs',
+    equipment: 'bodyweight',
+    guide: guidePresets.splitSquat,
+    isCustom: false
+  }),
+  exercise({
+    id: 'glute-bridge',
+    name: '글루트 브리지',
+    kind: 'strength',
+    muscleGroup: 'legs',
+    equipment: 'bodyweight',
+    guide: guidePresets.hinge,
+    isCustom: false
+  }),
+  exercise({
     id: 'shoulder-press',
     name: '숄더프레스',
     kind: 'strength',
@@ -561,6 +666,15 @@ export const exerciseCatalog: Exercise[] = [
     isCustom: false
   }),
   exercise({
+    id: 'pike-push-up',
+    name: '파이크 푸시업',
+    kind: 'strength',
+    muscleGroup: 'shoulders',
+    equipment: 'bodyweight',
+    guide: guidePresets.pikePushUp,
+    isCustom: false
+  }),
+  exercise({
     id: 'kettlebell-clean-and-press',
     name: '케틀벨 클린 앤 프레스',
     kind: 'strength',
@@ -584,6 +698,15 @@ export const exerciseCatalog: Exercise[] = [
     muscleGroup: 'core',
     equipment: 'bodyweight',
     guide: guidePresets.plank,
+    isCustom: false
+  }),
+  exercise({
+    id: 'hanging-knee-raise',
+    name: '행잉 니 레이즈',
+    kind: 'strength',
+    muscleGroup: 'core',
+    equipment: 'bodyweight',
+    guide: guidePresets.hangingRaise,
     isCustom: false
   }),
   exercise({
@@ -620,6 +743,15 @@ export const exerciseCatalog: Exercise[] = [
     isCustom: false
   }),
   exercise({
+    id: 'dip',
+    name: '딥스',
+    kind: 'strength',
+    muscleGroup: 'arms',
+    equipment: 'bodyweight',
+    guide: guidePresets.dip,
+    isCustom: false
+  }),
+  exercise({
     id: 'easy-run',
     name: '이지 런',
     kind: 'running',
@@ -651,6 +783,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Dumbbell Push Pull',
     blurb: '아령 위주로 상체 밀기와 당기기를 균형 있게 구성한 루틴',
     focus: '덤벨 위주',
+    difficulty: 'intermediate',
     targets: ['가슴', '등', '어깨'],
     benefits: ['상체 밸런스', '프리웨이트 적응'],
     items: [
@@ -665,6 +798,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Dumbbell Lower Builder',
     blurb: '스쿼트, 힙힌지, 단측 하체를 아령으로 채우는 하체 루틴',
     focus: '덤벨 위주',
+    difficulty: 'intermediate',
     targets: ['하체', '코어', '둔근'],
     benefits: ['하체 안정성', '균형 강화'],
     items: [
@@ -679,6 +813,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Freeweight Full Body',
     blurb: '장비가 많지 않아도 바로 돌릴 수 있는 덤벨 전신 루틴',
     focus: '프리웨이트 입문',
+    difficulty: 'beginner',
     targets: ['전신', '코어'],
     benefits: ['기초 체력', '입문용 루틴'],
     items: [
@@ -694,6 +829,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Kettlebell Flow',
     blurb: '케틀벨만으로 하체, 코어, 전신 협응을 함께 끌어올리는 루틴',
     focus: '케틀벨 위주',
+    difficulty: 'intermediate',
     targets: ['하체', '코어', '전신'],
     benefits: ['전신 협응', '컨디셔닝'],
     items: [
@@ -708,6 +844,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Freeweight + Run',
     blurb: '덤벨 전신 자극 후 가볍게 러닝까지 연결하는 혼합 루틴',
     focus: '덤벨 + 러닝',
+    difficulty: 'intermediate',
     targets: ['전신', '심폐'],
     benefits: ['체지방 관리', '운동 습관 만들기'],
     items: [
@@ -718,10 +855,224 @@ export const routineTemplates: RoutineTemplate[] = [
     ]
   },
   {
+    id: 'template-bodyweight-foundation',
+    name: 'Bodyweight Foundation',
+    blurb: '맨몸 기본 패턴으로 전신 밸런스와 운동 습관을 만들기 좋은 루틴',
+    focus: '맨몸 기본기',
+    difficulty: 'beginner',
+    targets: ['가슴', '하체', '코어'],
+    benefits: ['입문용', '기초 체력', '어디서나 가능'],
+    items: [
+      bodyweightItem('push-up', 1, 4, 10, 60),
+      bodyweightItem('bodyweight-squat', 2, 4, 15, 45),
+      bodyweightItem('bodyweight-reverse-lunge', 3, 3, 10, 45, '한쪽씩 10회'),
+      bodyweightItem('plank', 4, 3, 1, 45, '45~60초 유지')
+    ]
+  },
+  {
+    id: 'template-bodyweight-upper-core',
+    name: 'Bodyweight Upper + Core',
+    blurb: '푸시업과 맨몸 당기기 패턴, 코어를 함께 묶은 상체 중심 루틴',
+    focus: '맨몸 상체',
+    difficulty: 'intermediate',
+    targets: ['가슴', '등', '코어'],
+    benefits: ['상체 지구력', '코어 강화'],
+    items: [
+      bodyweightItem('push-up', 1, 4, 12, 60),
+      bodyweightItem('inverted-row', 2, 4, 10, 60),
+      bodyweightItem('pike-push-up', 3, 3, 8, 60),
+      bodyweightItem('hanging-knee-raise', 4, 3, 10, 45),
+      bodyweightItem('plank', 5, 3, 1, 45, '45초 유지')
+    ]
+  },
+  {
+    id: 'template-bodyweight-lower-stability',
+    name: 'Bodyweight Lower Stability',
+    blurb: '맨몸 스쿼트와 런지, 힙 브리지로 하체 안정성과 균형을 다지는 루틴',
+    focus: '맨몸 하체',
+    difficulty: 'beginner',
+    targets: ['하체', '둔근', '코어'],
+    benefits: ['균형 강화', '하체 안정성'],
+    items: [
+      bodyweightItem('bodyweight-squat', 1, 4, 18, 45),
+      bodyweightItem('bodyweight-reverse-lunge', 2, 3, 12, 45, '좌우 각각 진행'),
+      bodyweightItem('glute-bridge', 3, 4, 15, 45),
+      bodyweightItem('plank', 4, 3, 1, 45, '60초 유지 기준')
+    ]
+  },
+  {
+    id: 'template-travel-reset',
+    name: 'Travel Reset',
+    blurb: '출장이나 여행 중에도 침대 옆 공간에서 바로 할 수 있는 맨몸 리셋 루틴',
+    focus: '맨몸 미니멀',
+    difficulty: 'beginner',
+    targets: ['전신', '코어'],
+    benefits: ['짧고 효율적', '지속성'],
+    items: [
+      bodyweightItem('push-up', 1, 3, 12, 45),
+      bodyweightItem('bodyweight-squat', 2, 3, 20, 30),
+      bodyweightItem('glute-bridge', 3, 3, 15, 30),
+      bodyweightItem('plank', 4, 3, 1, 30, '30~45초 유지')
+    ]
+  },
+  {
+    id: 'template-pullup-bar-builder',
+    name: 'Pull-up Bar Builder',
+    blurb: '철봉을 중심으로 등, 팔, 코어를 단계적으로 강화하는 루틴',
+    focus: '철봉 기본기',
+    difficulty: 'intermediate',
+    targets: ['등', '팔', '코어'],
+    benefits: ['등 힘 강화', '철봉 적응'],
+    items: [
+      bodyweightItem('pull-up', 1, 5, 5, 90),
+      bodyweightItem('chin-up', 2, 4, 6, 90),
+      bodyweightItem('hanging-knee-raise', 3, 4, 10, 45),
+      bodyweightItem('push-up', 4, 3, 12, 45)
+    ]
+  },
+  {
+    id: 'template-pullup-bar-volume',
+    name: 'Pull-up Bar Volume Day',
+    blurb: '풀업 볼륨과 맨몸 보조 운동으로 철봉 횟수를 늘리기 좋은 루틴',
+    focus: '철봉 볼륨',
+    difficulty: 'advanced',
+    targets: ['등', '어깨', '팔'],
+    benefits: ['반복 수 향상', '상체 지구력'],
+    items: [
+      bodyweightItem('inverted-row', 1, 4, 12, 60),
+      bodyweightItem('pull-up', 2, 6, 4, 75, '매 세트 품질 우선'),
+      bodyweightItem('chin-up', 3, 3, 8, 75),
+      bodyweightItem('dip', 4, 3, 10, 60)
+    ]
+  },
+  {
+    id: 'template-pullup-bar-core',
+    name: 'Bar + Core Control',
+    blurb: '철봉 매달리기, 친업, 행잉 레이즈로 상체 통제와 코어를 함께 잡는 루틴',
+    focus: '철봉 + 코어',
+    difficulty: 'advanced',
+    targets: ['등', '코어'],
+    benefits: ['그립 강화', '코어 안정성'],
+    items: [
+      bodyweightItem('chin-up', 1, 4, 6, 90),
+      bodyweightItem('hanging-knee-raise', 2, 4, 12, 45),
+      bodyweightItem('inverted-row', 3, 3, 12, 60),
+      bodyweightItem('plank', 4, 3, 1, 45, '45~60초 유지')
+    ]
+  },
+  {
+    id: 'template-dumbbell-push-builder',
+    name: 'Dumbbell Push Builder',
+    blurb: '가슴과 어깨, 삼두를 아령만으로 채우는 밀기 중심 루틴',
+    focus: '아령 밀기',
+    difficulty: 'intermediate',
+    targets: ['가슴', '어깨', '팔'],
+    benefits: ['상체 볼륨', '프레스 향상'],
+    items: [
+      strengthItem('flat-dumbbell-press', 1, 4, 8, 18, 90),
+      strengthItem('incline-dumbbell-press', 2, 3, 10, 16, 90),
+      strengthItem('shoulder-press', 3, 3, 10, 14, 75),
+      strengthItem('overhead-dumbbell-triceps-extension', 4, 3, 12, 12, 60)
+    ]
+  },
+  {
+    id: 'template-dumbbell-pull-lower',
+    name: 'Dumbbell Pull + Lower',
+    blurb: '로우와 힙힌지, 단측 하체를 섞어 균형을 챙기는 아령 루틴',
+    focus: '아령 균형형',
+    difficulty: 'intermediate',
+    targets: ['등', '하체', '둔근'],
+    benefits: ['균형 강화', '후면 사슬'],
+    items: [
+      strengthItem('one-arm-dumbbell-row', 1, 4, 10, 18, 90),
+      strengthItem('dumbbell-romanian-deadlift', 2, 4, 10, 18, 90),
+      strengthItem('dumbbell-step-up', 3, 3, 10, 12, 75),
+      strengthItem('hammer-curl', 4, 3, 12, 10, 60)
+    ]
+  },
+  {
+    id: 'template-dumbbell-strength-circuit',
+    name: 'Dumbbell Strength Circuit',
+    blurb: '전신 자극을 고르게 담아 집에서도 돌리기 쉬운 아령 루틴',
+    focus: '아령 전신',
+    difficulty: 'beginner',
+    targets: ['전신', '코어'],
+    benefits: ['전신 자극', '집운동'],
+    items: [
+      strengthItem('dumbbell-goblet-squat', 1, 4, 10, 20, 75),
+      strengthItem('dumbbell-floor-press', 2, 4, 10, 16, 75),
+      strengthItem('chest-supported-dumbbell-row', 3, 4, 10, 16, 75),
+      strengthItem('dumbbell-thruster', 4, 3, 10, 10, 60),
+      bodyweightItem('plank', 5, 3, 1, 45, '45초 유지')
+    ]
+  },
+  {
+    id: 'template-dumbbell-aesthetic-upper',
+    name: 'Dumbbell Aesthetic Upper',
+    blurb: '프레스, 레이즈, 컬을 묶어 상체 볼륨을 채우는 아령 루틴',
+    focus: '아령 상체 볼륨',
+    difficulty: 'advanced',
+    targets: ['가슴', '어깨', '팔'],
+    benefits: ['볼륨 확보', '상체 라인'],
+    items: [
+      strengthItem('incline-dumbbell-press', 1, 4, 10, 16, 90),
+      strengthItem('dumbbell-lateral-raise', 2, 3, 14, 6, 45),
+      strengthItem('dumbbell-rear-delt-fly', 3, 3, 14, 6, 45),
+      strengthItem('dumbbell-biceps-curl', 4, 3, 12, 10, 45),
+      strengthItem('overhead-dumbbell-triceps-extension', 5, 3, 12, 10, 45)
+    ]
+  },
+  {
+    id: 'template-kettlebell-strength-base',
+    name: 'Kettlebell Strength Base',
+    blurb: '스윙과 스쿼트, 프레스로 케틀벨 기본 패턴을 탄탄하게 만드는 루틴',
+    focus: '케틀벨 기본기',
+    difficulty: 'beginner',
+    targets: ['하체', '어깨', '코어'],
+    benefits: ['전신 자극', '케틀벨 적응'],
+    items: [
+      strengthItem('kettlebell-deadlift', 1, 4, 10, 20, 75),
+      strengthItem('kettlebell-goblet-squat', 2, 4, 10, 16, 75),
+      strengthItem('kettlebell-clean-and-press', 3, 4, 6, 12, 75),
+      strengthItem('kettlebell-halo', 4, 3, 10, 8, 45)
+    ]
+  },
+  {
+    id: 'template-kettlebell-conditioning-ladder',
+    name: 'Kettlebell Conditioning Ladder',
+    blurb: '짧은 휴식으로 심폐와 전신 협응을 함께 끌어올리는 케틀벨 루틴',
+    focus: '케틀벨 컨디셔닝',
+    difficulty: 'advanced',
+    targets: ['전신', '심폐'],
+    benefits: ['컨디셔닝', '칼로리 소모'],
+    items: [
+      strengthItem('kettlebell-swing', 1, 6, 15, 16, 45),
+      strengthItem('kettlebell-front-rack-reverse-lunge', 2, 4, 8, 12, 60, '좌우 각각 진행'),
+      strengthItem('kettlebell-row', 3, 4, 10, 16, 60),
+      strengthItem('kettlebell-clean-and-press', 4, 3, 8, 10, 60)
+    ]
+  },
+  {
+    id: 'template-kettlebell-stability-core',
+    name: 'Kettlebell Stability Core',
+    blurb: '겟업과 헤일로, 스쿼트로 몸통 안정성과 전신 제어를 키우는 루틴',
+    focus: '케틀벨 안정성',
+    difficulty: 'advanced',
+    targets: ['코어', '어깨', '하체'],
+    benefits: ['안정성 향상', '전신 통제'],
+    items: [
+      strengthItem('kettlebell-turkish-get-up', 1, 3, 3, 8, 90, '좌우 각각 3회'),
+      strengthItem('kettlebell-halo', 2, 3, 12, 8, 45),
+      strengthItem('kettlebell-goblet-squat', 3, 4, 8, 16, 75),
+      bodyweightItem('plank', 4, 3, 1, 45, '45~60초 유지')
+    ]
+  },
+  {
     id: 'template-upper',
     name: 'Upper Momentum',
     blurb: '가슴과 등을 한 번에 밀어올리는 상체 루틴',
     focus: '웨이트 주력',
+    difficulty: 'intermediate',
     targets: ['가슴', '등', '어깨'],
     benefits: ['상체 근력', '중량 향상'],
     items: [
@@ -736,6 +1087,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Lower Power',
     blurb: '하체 중량과 안정성을 끌어올리는 기본 루틴',
     focus: '웨이트 주력',
+    difficulty: 'advanced',
     targets: ['하체', '코어'],
     benefits: ['하체 근력', '중량 적응'],
     items: [
@@ -750,6 +1102,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Full Body Express',
     blurb: '주 3회 기준으로 운영하기 쉬운 전신 루틴',
     focus: '웨이트 입문',
+    difficulty: 'beginner',
     targets: ['전신', '코어'],
     benefits: ['입문용', '짧고 효율적'],
     items: [
@@ -764,6 +1117,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Hybrid Reset',
     blurb: '하체 자극 후 짧은 러닝으로 마무리하는 혼합 루틴',
     focus: '웨이트 + 러닝',
+    difficulty: 'intermediate',
     targets: ['하체', '심폐'],
     benefits: ['체력 보강', '혼합 루틴'],
     items: [
@@ -777,6 +1131,7 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Easy Run Base',
     blurb: '주간 러닝 빈도를 채우기 좋은 회복성 러닝',
     focus: '러닝 베이스',
+    difficulty: 'beginner',
     targets: ['심폐', '러닝 기본기'],
     benefits: ['회복 주행', '지구력 베이스'],
     items: [runningItem('easy-run', 1, 4, 30, '호흡이 편한 강도로 유지')]
@@ -786,29 +1141,79 @@ export const routineTemplates: RoutineTemplate[] = [
     name: 'Tempo Sharpener',
     blurb: '조금 빠른 페이스 감각을 익히는 템포 러닝',
     focus: '러닝 향상',
+    difficulty: 'advanced',
     targets: ['심폐', '페이스 감각'],
     benefits: ['러닝 향상', '속도 적응'],
     items: [runningItem('tempo-run', 1, 5, 28, '중간 3km는 약간 숨찰 정도')]
   }
 ];
 
+const starterTemplatePool: Record<
+  'strength-running' | 'strength' | 'running',
+  Record<RoutineDifficulty, string[]>
+> = {
+  'strength-running': {
+    beginner: [
+      'template-bodyweight-foundation',
+      'template-dumbbell-strength-circuit',
+      'template-kettlebell-strength-base',
+      'template-easy-run'
+    ],
+    intermediate: [
+      'template-bodyweight-upper-core',
+      'template-dumbbell-push-builder',
+      'template-kettlebell-flow',
+      'template-easy-run'
+    ],
+    advanced: [
+      'template-pullup-bar-builder',
+      'template-dumbbell-aesthetic-upper',
+      'template-kettlebell-conditioning-ladder',
+      'template-tempo-run'
+    ]
+  },
+  strength: {
+    beginner: [
+      'template-bodyweight-foundation',
+      'template-bodyweight-lower-stability',
+      'template-dumbbell-strength-circuit',
+      'template-kettlebell-strength-base'
+    ],
+    intermediate: [
+      'template-bodyweight-upper-core',
+      'template-pullup-bar-builder',
+      'template-dumbbell-pull-lower',
+      'template-kettlebell-flow'
+    ],
+    advanced: [
+      'template-pullup-bar-volume',
+      'template-pullup-bar-core',
+      'template-dumbbell-aesthetic-upper',
+      'template-kettlebell-stability-core'
+    ]
+  },
+  running: {
+    beginner: ['template-easy-run', 'template-tempo-run'],
+    intermediate: ['template-easy-run', 'template-tempo-run'],
+    advanced: ['template-tempo-run', 'template-easy-run']
+  }
+};
+
 export function getStarterTemplateIds(input: SetupInput): string[] {
   const wantsStrength = input.workoutTypes.includes('strength');
   const wantsRunning = input.workoutTypes.includes('running');
+  const starterDifficulty = input.starterDifficulty ?? 'beginner';
 
   if (wantsStrength && wantsRunning) {
-    return input.workoutsPerWeek >= 4
-      ? ['template-dumbbell-upper', 'template-dumbbell-lower', 'template-easy-run', 'template-kettlebell-flow']
-      : ['template-freeweight-full', 'template-dumbbell-hybrid', 'template-easy-run'];
+    return starterTemplatePool['strength-running'][starterDifficulty].slice(
+      0,
+      input.workoutsPerWeek >= 4 ? 4 : 3
+    );
   }
 
   if (wantsStrength) {
-    return input.workoutsPerWeek >= 4
-      ? ['template-dumbbell-upper', 'template-dumbbell-lower']
-      : ['template-freeweight-full'];
+    return starterTemplatePool.strength[starterDifficulty].slice(0, input.workoutsPerWeek >= 4 ? 4 : 3);
   }
 
-  return input.workoutsPerWeek >= 4
-    ? ['template-easy-run', 'template-tempo-run']
-    : ['template-easy-run'];
+  return starterTemplatePool.running[starterDifficulty].slice(0, input.workoutsPerWeek >= 4 ? 2 : 1);
 }
