@@ -1,11 +1,12 @@
 import Dexie, { type Table } from 'dexie';
-import type { Exercise, Profile, Routine, WorkoutSession } from './types';
+import type { Exercise, HealthMetricEntry, Profile, Routine, WorkoutSession } from './types';
 
 export class HealthTaskDatabase extends Dexie {
   profile!: Table<Profile, string>;
   exercises!: Table<Exercise, string>;
   routines!: Table<Routine, string>;
   sessions!: Table<WorkoutSession, string>;
+  healthEntries!: Table<HealthMetricEntry, string>;
 
   constructor() {
     super('health-task-db');
@@ -32,6 +33,14 @@ export class HealthTaskDatabase extends Dexie {
             delete (routine as { scheduleDays?: unknown }).scheduleDays;
           })
       );
+
+    this.version(3).stores({
+      profile: 'id, onboardingDone, updatedAt',
+      exercises: 'id, kind, muscleGroup, name',
+      routines: 'id, kind, isActive, updatedAt',
+      sessions: 'id, sessionDate, status, routineId, createdAt',
+      healthEntries: 'id, recordDate, updatedAt'
+    });
   }
 }
 

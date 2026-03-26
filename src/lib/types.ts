@@ -143,6 +143,17 @@ export interface WorkoutSession {
   createdAt: string;
 }
 
+export interface HealthMetricEntry {
+  id: string;
+  recordDate: string;
+  weightKg?: number;
+  skeletalMuscleKg?: number;
+  bodyFatKg?: number;
+  visceralFatLevel?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface RoutineTemplate {
   id: string;
   name: string;
@@ -167,4 +178,5 @@ export interface BackupPayload {
   exercises: Exercise[];
   routines: Routine[];
   sessions: WorkoutSession[];
+  healthEntries?: HealthMetricEntry[];
 }

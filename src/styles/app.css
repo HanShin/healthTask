@@ -704,6 +704,168 @@ select:focus {
   text-align: right;
 }
 
+.trend-summary-card {
+  display: grid;
+  gap: 6px;
+  margin-top: 1rem;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.trend-summary-card > div {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.trend-summary-card span,
+.trend-summary-card p {
+  color: var(--muted);
+}
+
+.trend-summary-card strong {
+  color: var(--ink);
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: clamp(1.6rem, 7vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.trend-summary-card p {
+  margin: 0;
+}
+
+.trend-summary-card--workout {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(247, 209, 139, 0.22));
+}
+
+.trend-summary-card--health {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(111, 171, 141, 0.18));
+}
+
+.trend-chart {
+  margin-top: 0.9rem;
+  border-radius: 24px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
+}
+
+.trend-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.trend-chart--workout {
+  --chart-accent: var(--accent-warm);
+  --chart-accent-soft: rgba(219, 108, 63, 0.18);
+}
+
+.trend-chart--health {
+  --chart-accent: var(--accent-soft);
+  --chart-accent-soft: rgba(46, 106, 88, 0.18);
+}
+
+.trend-chart__baseline {
+  stroke: rgba(23, 56, 47, 0.12);
+  stroke-width: 1.5;
+}
+
+.trend-chart__bar {
+  fill: var(--chart-accent);
+  opacity: 0.88;
+}
+
+.trend-chart__area {
+  fill: var(--chart-accent-soft);
+}
+
+.trend-chart__line {
+  fill: none;
+  stroke: var(--chart-accent);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-chart__dot {
+  fill: #fff;
+  stroke: var(--chart-accent);
+  stroke-width: 3;
+}
+
+.trend-chart__axis-label {
+  fill: var(--muted);
+  font-size: 11px;
+}
+
+.chart-empty-copy {
+  margin-top: 1rem;
+}
+
+.field-grid--health {
+  margin-top: 1rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.health-entry-actions {
+  margin-top: 1rem;
+}
+
+.health-entry-caption,
+.form-feedback {
+  margin: 0;
+}
+
+.form-feedback {
+  padding: 12px 14px;
+  border-radius: 16px;
+  font-size: 0.92rem;
+}
+
+.form-feedback--success {
+  background: rgba(46, 106, 88, 0.12);
+  color: var(--accent);
+}
+
+.form-feedback--error {
+  background: rgba(219, 108, 63, 0.12);
+  color: #9e4f2d;
+}
+
+.health-entry-row {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+  color: inherit;
+  text-align: left;
+}
+
+.health-entry-row.is-active {
+  border-color: rgba(46, 106, 88, 0.28);
+  background: rgba(46, 106, 88, 0.09);
+}
+
+.health-entry-row__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.health-entry-row__copy p {
+  margin: 0;
+  color: var(--muted);
+}
+
 .session-history-card {
   display: grid;
   gap: 14px;
@@ -1328,7 +1490,8 @@ select:focus {
   .template-card,
   .set-row,
   .history-row,
-  .detail-row {
+  .detail-row,
+  .health-entry-row {
     flex-direction: column;
     align-items: stretch;
   }
@@ -1370,6 +1533,10 @@ select:focus {
 
   .history-row__metrics {
     text-align: left;
+  }
+
+  .trend-summary-card > div {
+    align-items: flex-start;
   }
 
   .bottom-nav__detail {

@@ -4,6 +4,7 @@ import { createId } from './id';
 import type {
   BackupPayload,
   Exercise,
+  HealthMetricEntry,
   Profile,
   Routine,
   RoutineDraftItem,
@@ -234,12 +235,109 @@ export async function deleteWorkoutSession(sessionId: string): Promise<void> {
   await db.sessions.delete(sessionId);
 }
 
+function normalizeHealthMetric(value?: number): number | undefined {
+  if (value === undefined || Number.isNaN(value) || value <= 0) {
+    return undefined;
+  }
+
+  return value;
+}
+
+function sanitizeHealthMetrics(input: {
+  weightKg?: number;
+  skeletalMuscleKg?: number;
+  bodyFatKg?: number;
+  visceralFatLevel?: number;
+}): Pick<HealthMetricEntry, 'weightKg' | 'skeletalMuscleKg' | 'bodyFatKg' | 'visceralFatLevel'> {
+  return {
+    weightKg: normalizeHealthMetric(input.weightKg),
+    skeletalMuscleKg: normalizeHealthMetric(input.skeletalMuscleKg),
+    bodyFatKg: normalizeHealthMetric(input.bodyFatKg),
+    visceralFatLevel: normalizeHealthMetric(input.visceralFatLevel)
+  };
+}
+
+export async function getHealthEntryByDate(recordDate: string): Promise<HealthMetricEntry | undefined> {
+  return db.healthEntries.where('recordDate').equals(recordDate).first();
+}
+
+export async function saveHealthEntry(input: {
+  entryId?: string;
+  recordDate: string;
+  weightKg?: number;
+  skeletalMuscleKg?: number;
+  bodyFatKg?: number;
+  visceralFatLevel?: number;
+}): Promise<string> {
+  const timestamp = new Date().toISOString();
+  const metrics = sanitizeHealthMetrics(input);
+  const hasAnyMetric = Object.values(metrics).some((value) => value !== undefined);
+
+  if (!input.recordDate) {
+    throw new Error('건강 기록 날짜를 먼저 선택해 주세요.');
+  }
+
+  if (!hasAnyMetric) {
+    throw new Error('건강 데이터는 최소 1개 값을 입력해야 합니다.');
+  }
+
+  const existingForDate = await getHealthEntryByDate(input.recordDate);
+
+  if (input.entryId) {
+    const existing = await db.healthEntries.get(input.entryId);
+
+    if (!existing) {
+      throw new Error('수정할 건강 기록을 찾을 수 없습니다.');
+    }
+
+    if (existingForDate && existingForDate.id !== input.entryId) {
+      throw new Error('같은 날짜 건강 기록이 이미 있습니다. 기존 기록을 선택해 수정해 주세요.');
+    }
+
+    await db.healthEntries.put({
+      ...existing,
+      recordDate: input.recordDate,
+      ...metrics,
+      updatedAt: timestamp
+    });
+
+    return existing.id;
+  }
+
+  if (existingForDate) {
+    await db.healthEntries.put({
+      ...existingForDate,
+      ...metrics,
+      updatedAt: timestamp
+    });
+
+    return existingForDate.id;
+  }
+
+  const entry: HealthMetricEntry = {
+    id: createId('health'),
+    recordDate: input.recordDate,
+    ...metrics,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  };
+
+  await db.healthEntries.add(entry);
+
+  return entry.id;
+}
+
+export async function deleteHealthEntry(entryId: string): Promise<void> {
+  await db.healthEntries.delete(entryId);
+}
+
 export async function buildBackupPayload(): Promise<BackupPayload> {
-  const [profile, exercises, routines, sessions] = await Promise.all([
+  const [profile, exercises, routines, sessions, healthEntries] = await Promise.all([
     db.profile.get('local-profile'),
     db.exercises.toArray(),
     db.routines.toArray(),
-    db.sessions.toArray()
+    db.sessions.toArray(),
+    db.healthEntries.toArray()
   ]);
 
   const payload: BackupPayload = {
@@ -247,7 +345,8 @@ export async function buildBackupPayload(): Promise<BackupPayload> {
     profile: profile ?? null,
     exercises,
     routines,
-    sessions
+    sessions,
+    healthEntries
   };
 
   return payload;
@@ -260,11 +359,12 @@ export async function exportBackup(): Promise<string> {
 }
 
 export async function restoreBackupPayload(payload: BackupPayload): Promise<void> {
-  await db.transaction('rw', db.profile, db.exercises, db.routines, db.sessions, async () => {
+  await db.transaction('rw', [db.profile, db.exercises, db.routines, db.sessions, db.healthEntries], async () => {
     await db.profile.clear();
     await db.exercises.clear();
     await db.routines.clear();
     await db.sessions.clear();
+    await db.healthEntries.clear();
 
     if (payload.profile) {
       await db.profile.put(payload.profile);
@@ -273,6 +373,7 @@ export async function restoreBackupPayload(payload: BackupPayload): Promise<void
     await db.exercises.bulkPut(payload.exercises);
     await db.routines.bulkPut(payload.routines);
     await db.sessions.bulkPut(payload.sessions);
+    await db.healthEntries.bulkPut(payload.healthEntries ?? []);
   });
 }
 
@@ -283,11 +384,12 @@ export async function importBackup(rawText: string): Promise<void> {
 }
 
 export async function resetAllData(exercises: Exercise[]): Promise<void> {
-  await db.transaction('rw', db.profile, db.exercises, db.routines, db.sessions, async () => {
+  await db.transaction('rw', [db.profile, db.exercises, db.routines, db.sessions, db.healthEntries], async () => {
     await db.profile.clear();
     await db.exercises.clear();
     await db.routines.clear();
     await db.sessions.clear();
+    await db.healthEntries.clear();
     await db.exercises.bulkPut(exercises);
   });
 }
