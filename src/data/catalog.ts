@@ -30,6 +30,8 @@ function strengthItem(
 ): RoutineDraftItem {
   return {
     id: createId('plan'),
+    category: 'weight',
+    recordMode: 'sets',
     kind: 'strength',
     exerciseId,
     order,
@@ -49,10 +51,21 @@ function bodyweightItem(
   restSeconds = 60,
   note?: string
 ): RoutineDraftItem {
-  return strengthItem(exerciseId, order, sets, targetReps, 0, restSeconds, note);
+  return {
+    id: createId('plan'),
+    category: 'bodyweight',
+    recordMode: 'sets',
+    kind: 'strength',
+    exerciseId,
+    order,
+    sets,
+    targetReps,
+    restSeconds,
+    note
+  };
 }
 
-function runningItem(
+function cardioItem(
   exerciseId: string,
   order: number,
   targetDistanceKm: number,
@@ -61,9 +74,12 @@ function runningItem(
 ): RoutineDraftItem {
   return {
     id: createId('plan'),
+    category: 'cardio',
+    recordMode: 'cardio',
     kind: 'running',
     exerciseId,
     order,
+    targetActivityLabel: '유산소',
     targetDistanceKm,
     targetDurationMin,
     targetPaceMinPerKm: Number((targetDurationMin / targetDistanceKm).toFixed(1)),
@@ -843,8 +859,8 @@ export const routineTemplates: RoutineTemplate[] = [
   {
     id: 'template-dumbbell-hybrid',
     name: 'Freeweight + Run',
-    blurb: '덤벨 전신 자극 후 가볍게 러닝까지 연결하는 혼합 루틴',
-    focus: '덤벨 + 러닝',
+    blurb: '덤벨 전신 자극 후 가볍게 유산소까지 연결하는 혼합 루틴',
+    focus: '덤벨 + 유산소',
     difficulty: 'intermediate',
     targets: ['전신', '심폐'],
     benefits: ['체지방 관리', '운동 습관 만들기'],
@@ -852,7 +868,7 @@ export const routineTemplates: RoutineTemplate[] = [
       strengthItem('dumbbell-goblet-squat', 1, 3, 10, 18, 75),
       strengthItem('flat-dumbbell-press', 2, 3, 10, 16, 75),
       strengthItem('one-arm-dumbbell-row', 3, 3, 10, 16, 75),
-      runningItem('easy-run', 4, 3, 20, '웨이트 후 가볍게 호흡 정리')
+      cardioItem('easy-run', 4, 3, 20, '웨이트 후 가볍게 호흡 정리')
     ]
   },
   {
@@ -1116,44 +1132,50 @@ export const routineTemplates: RoutineTemplate[] = [
   {
     id: 'template-hybrid',
     name: 'Hybrid Reset',
-    blurb: '하체 자극 후 짧은 러닝으로 마무리하는 혼합 루틴',
-    focus: '웨이트 + 러닝',
+    blurb: '하체 자극 후 짧은 유산소로 마무리하는 혼합 루틴',
+    focus: '웨이트 + 유산소',
     difficulty: 'intermediate',
     targets: ['하체', '심폐'],
     benefits: ['체력 보강', '혼합 루틴'],
     items: [
       strengthItem('squat', 1, 4, 8, 55, 120),
       strengthItem('leg-press', 2, 3, 12, 90, 90),
-      runningItem('easy-run', 3, 3, 22, '웨이트 후 가볍게 호흡 정리')
+      cardioItem('easy-run', 3, 3, 22, '웨이트 후 가볍게 호흡 정리')
     ]
   },
   {
     id: 'template-easy-run',
     name: 'Easy Run Base',
-    blurb: '주간 러닝 빈도를 채우기 좋은 회복성 러닝',
-    focus: '러닝 베이스',
+    blurb: '주간 유산소 빈도를 채우기 좋은 회복성 유산소',
+    focus: '유산소 베이스',
     difficulty: 'beginner',
-    targets: ['심폐', '러닝 기본기'],
-    benefits: ['회복 주행', '지구력 베이스'],
-    items: [runningItem('easy-run', 1, 4, 30, '호흡이 편한 강도로 유지')]
+    targets: ['심폐', '유산소 기본기'],
+    benefits: ['유산소 회복', '지구력 베이스'],
+    items: [cardioItem('easy-run', 1, 4, 30, '호흡이 편한 강도로 유지')]
   },
   {
     id: 'template-tempo-run',
     name: 'Tempo Sharpener',
-    blurb: '조금 빠른 페이스 감각을 익히는 템포 러닝',
-    focus: '러닝 향상',
+    blurb: '조금 빠른 페이스 감각을 익히는 템포 유산소',
+    focus: '유산소 향상',
     difficulty: 'advanced',
     targets: ['심폐', '페이스 감각'],
-    benefits: ['러닝 향상', '속도 적응'],
-    items: [runningItem('tempo-run', 1, 5, 28, '중간 3km는 약간 숨찰 정도')]
+    benefits: ['유산소 향상', '속도 적응'],
+    items: [cardioItem('tempo-run', 1, 5, 28, '중간 3km는 약간 숨찰 정도')]
   }
 ];
 
-const starterTemplatePool: Record<
-  'strength-running' | 'strength' | 'running',
-  Record<RoutineDifficulty, string[]>
-> = {
-  'strength-running': {
+type StarterPoolKey =
+  | 'weight-bodyweight-cardio'
+  | 'weight-bodyweight'
+  | 'weight-cardio'
+  | 'bodyweight-cardio'
+  | 'weight'
+  | 'bodyweight'
+  | 'cardio';
+
+const starterTemplatePool: Record<StarterPoolKey, Record<RoutineDifficulty, string[]>> = {
+  'weight-bodyweight-cardio': {
     beginner: [
       'template-bodyweight-foundation',
       'template-dumbbell-strength-circuit',
@@ -1173,7 +1195,7 @@ const starterTemplatePool: Record<
       'template-tempo-run'
     ]
   },
-  strength: {
+  'weight-bodyweight': {
     beginner: [
       'template-bodyweight-foundation',
       'template-bodyweight-lower-stability',
@@ -1193,28 +1215,130 @@ const starterTemplatePool: Record<
       'template-kettlebell-stability-core'
     ]
   },
-  running: {
+  'weight-cardio': {
+    beginner: [
+      'template-dumbbell-strength-circuit',
+      'template-kettlebell-strength-base',
+      'template-hybrid',
+      'template-easy-run'
+    ],
+    intermediate: [
+      'template-dumbbell-push-builder',
+      'template-kettlebell-flow',
+      'template-dumbbell-pull-lower',
+      'template-tempo-run'
+    ],
+    advanced: [
+      'template-dumbbell-aesthetic-upper',
+      'template-kettlebell-conditioning-ladder',
+      'template-full',
+      'template-tempo-run'
+    ]
+  },
+  'bodyweight-cardio': {
+    beginner: [
+      'template-bodyweight-foundation',
+      'template-bodyweight-lower-stability',
+      'template-easy-run',
+      'template-travel-reset'
+    ],
+    intermediate: [
+      'template-bodyweight-upper-core',
+      'template-pullup-bar-builder',
+      'template-easy-run',
+      'template-travel-reset'
+    ],
+    advanced: [
+      'template-pullup-bar-volume',
+      'template-pullup-bar-core',
+      'template-tempo-run',
+      'template-bodyweight-upper-core'
+    ]
+  },
+  weight: {
+    beginner: [
+      'template-dumbbell-strength-circuit',
+      'template-kettlebell-strength-base',
+      'template-dumbbell-push-builder',
+      'template-dumbbell-pull-lower'
+    ],
+    intermediate: [
+      'template-dumbbell-upper',
+      'template-dumbbell-lower',
+      'template-dumbbell-aesthetic-upper',
+      'template-kettlebell-flow'
+    ],
+    advanced: [
+      'template-full',
+      'template-kettlebell-conditioning-ladder',
+      'template-kettlebell-stability-core',
+      'template-dumbbell-aesthetic-upper'
+    ]
+  },
+  bodyweight: {
+    beginner: [
+      'template-bodyweight-foundation',
+      'template-bodyweight-lower-stability',
+      'template-travel-reset',
+      'template-pullup-bar-builder'
+    ],
+    intermediate: [
+      'template-bodyweight-upper-core',
+      'template-pullup-bar-builder',
+      'template-pullup-bar-core',
+      'template-travel-reset'
+    ],
+    advanced: [
+      'template-pullup-bar-volume',
+      'template-pullup-bar-core',
+      'template-bodyweight-upper-core',
+      'template-travel-reset'
+    ]
+  },
+  cardio: {
     beginner: ['template-easy-run', 'template-tempo-run'],
     intermediate: ['template-easy-run', 'template-tempo-run'],
     advanced: ['template-tempo-run', 'template-easy-run']
   }
 };
 
+function getStarterPoolKey(input: SetupInput): StarterPoolKey {
+  const wantsWeight = input.workoutTypes.includes('weight') || input.workoutTypes.includes('strength');
+  const wantsBodyweight =
+    input.workoutTypes.includes('bodyweight') || input.workoutTypes.includes('strength');
+  const wantsCardio = input.workoutTypes.includes('cardio') || input.workoutTypes.includes('running');
+
+  if (wantsWeight && wantsBodyweight && wantsCardio) {
+    return 'weight-bodyweight-cardio';
+  }
+
+  if (wantsWeight && wantsBodyweight) {
+    return 'weight-bodyweight';
+  }
+
+  if (wantsWeight && wantsCardio) {
+    return 'weight-cardio';
+  }
+
+  if (wantsBodyweight && wantsCardio) {
+    return 'bodyweight-cardio';
+  }
+
+  if (wantsWeight) {
+    return 'weight';
+  }
+
+  if (wantsBodyweight) {
+    return 'bodyweight';
+  }
+
+  return 'cardio';
+}
+
 export function getStarterTemplateIds(input: SetupInput): string[] {
-  const wantsStrength = input.workoutTypes.includes('strength');
-  const wantsRunning = input.workoutTypes.includes('running');
   const starterDifficulty = input.starterDifficulty ?? 'beginner';
+  const starterPoolKey = getStarterPoolKey(input);
+  const starterTemplateLimit = starterPoolKey === 'cardio' ? (input.workoutsPerWeek >= 4 ? 2 : 1) : input.workoutsPerWeek >= 4 ? 4 : 3;
 
-  if (wantsStrength && wantsRunning) {
-    return starterTemplatePool['strength-running'][starterDifficulty].slice(
-      0,
-      input.workoutsPerWeek >= 4 ? 4 : 3
-    );
-  }
-
-  if (wantsStrength) {
-    return starterTemplatePool.strength[starterDifficulty].slice(0, input.workoutsPerWeek >= 4 ? 4 : 3);
-  }
-
-  return starterTemplatePool.running[starterDifficulty].slice(0, input.workoutsPerWeek >= 4 ? 2 : 1);
+  return starterTemplatePool[starterPoolKey][starterDifficulty].slice(0, starterTemplateLimit);
 }

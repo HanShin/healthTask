@@ -1,6 +1,14 @@
 import { isDateWithinCurrentWeek, parseDateInput, startOfWeek, toDateInput } from './date';
 import type { Profile, WorkoutSession } from './types';
 
+function isSetSessionItem(item: WorkoutSession['items'][number]): boolean {
+  return item.recordMode === 'sets' || item.category === 'weight' || item.category === 'bodyweight' || item.kind === 'strength';
+}
+
+function isCardioSessionItem(item: WorkoutSession['items'][number]): boolean {
+  return item.recordMode === 'cardio' || item.category === 'cardio' || item.kind === 'running';
+}
+
 export function getSessionsThisWeek(sessions: WorkoutSession[], referenceDate = new Date()): WorkoutSession[] {
   return sessions.filter((session) => isDateWithinCurrentWeek(session.sessionDate, referenceDate));
 }
@@ -59,17 +67,17 @@ export function getRecentSessions(sessions: WorkoutSession[], limit = 4): Workou
 
 export function getHistoryInsights(sessions: WorkoutSession[]): string[] {
   const weeklySessions = getSessionsThisWeek(sessions);
-  const strengthCount = weeklySessions.flatMap((session) => session.items).filter((item) => item.kind === 'strength').length;
-  const runningCount = weeklySessions.flatMap((session) => session.items).filter((item) => item.kind === 'running').length;
+  const setCount = weeklySessions.flatMap((session) => session.items).filter(isSetSessionItem).length;
+  const cardioCount = weeklySessions.flatMap((session) => session.items).filter(isCardioSessionItem).length;
 
   const insights: string[] = [];
 
-  if (strengthCount > 0) {
-    insights.push(`이번 주 웨이트 기록 ${strengthCount}개가 쌓였어요.`);
+  if (setCount > 0) {
+    insights.push(`이번 주 웨이트 기록 ${setCount}개가 쌓였어요.`);
   }
 
-  if (runningCount > 0) {
-    insights.push(`이번 주 러닝 기록 ${runningCount}개로 유산소 흐름을 유지 중입니다.`);
+  if (cardioCount > 0) {
+    insights.push(`이번 주 유산소 기록 ${cardioCount}개로 흐름을 유지 중입니다.`);
   }
 
   if (weeklySessions.length === 0) {

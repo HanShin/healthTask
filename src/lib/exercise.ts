@@ -1,13 +1,15 @@
 import type { Exercise } from './types';
 
+import { getExerciseCategoryLabel, inferLegacyExerciseCategory } from './workoutModel';
+
 export const equipmentLabelMap: Record<NonNullable<Exercise['equipment']>, string> = {
   barbell: '바벨',
   dumbbell: '아령',
   kettlebell: '케틀벨',
-  bodyweight: '맨몸',
+  bodyweight: '맨몸운동',
   machine: '머신',
   cable: '케이블',
-  running: '러닝'
+  running: '유산소'
 };
 
 export const muscleLabelMap: Record<NonNullable<Exercise['muscleGroup']>, string> = {
@@ -19,20 +21,38 @@ export const muscleLabelMap: Record<NonNullable<Exercise['muscleGroup']>, string
   core: '코어'
 };
 
+function getResolvedExerciseCategory(exercise: Exercise) {
+  if ('category' in exercise && exercise.category) {
+    return exercise.category;
+  }
+
+  if (exercise.kind === 'running') {
+    return 'cardio';
+  }
+
+  return inferLegacyExerciseCategory(exercise.kind ?? 'strength', exercise.equipment, exercise.name);
+}
+
 export function getExerciseKindLabel(exercise: Exercise): string {
-  return exercise.kind === 'running' ? '유산소' : '웨이트';
+  return getExerciseCategoryLabel(getResolvedExerciseCategory(exercise));
 }
 
 export function getExerciseEquipmentLabel(exercise: Exercise): string {
-  if (exercise.kind === 'running') {
-    return '러닝';
+  const category = getResolvedExerciseCategory(exercise);
+
+  if (category === 'cardio') {
+    return '유산소';
+  }
+
+  if (category === 'bodyweight') {
+    return '맨몸운동';
   }
 
   return exercise.equipment ? equipmentLabelMap[exercise.equipment] : '기본';
 }
 
 export function getExerciseTargetLabel(exercise: Exercise): string {
-  if (exercise.kind === 'running') {
+  if (getResolvedExerciseCategory(exercise) === 'cardio') {
     return '심폐지구력';
   }
 
@@ -40,8 +60,10 @@ export function getExerciseTargetLabel(exercise: Exercise): string {
 }
 
 export function getExerciseGroupLabel(exercise: Exercise): string {
-  if (exercise.kind === 'running') {
-    return '러닝';
+  const category = getResolvedExerciseCategory(exercise);
+
+  if (category === 'cardio' || category === 'bodyweight') {
+    return getExerciseCategoryLabel(category);
   }
 
   return exercise.muscleGroup ? muscleLabelMap[exercise.muscleGroup] : '기타';
@@ -52,15 +74,31 @@ export function getExerciseSummary(exercise: Exercise): string {
     return exercise.guide.headline;
   }
 
-  if (exercise.kind === 'running') {
+  const category = getResolvedExerciseCategory(exercise);
+
+  if (category === 'cardio') {
     return '거리, 시간, 평균 속도를 기준으로 유산소 루틴을 설계할 수 있어요.';
+  }
+
+  if (category === 'bodyweight') {
+    return '세트, 횟수, 휴식 시간을 기준으로 맨몸운동 루틴을 설계할 수 있어요.';
   }
 
   return '세트, 횟수, 중량, 휴식 시간을 기준으로 웨이트 루틴을 설계할 수 있어요.';
 }
 
 export function getExercisePlanningHint(exercise: Exercise): string {
-  return exercise.kind === 'running' ? '거리, 시간, 속도' : '세트, 횟수, 중량, 휴식';
+  const category = getResolvedExerciseCategory(exercise);
+
+  if (category === 'cardio') {
+    return '거리, 시간, 속도';
+  }
+
+  if (category === 'bodyweight') {
+    return '세트, 횟수, 휴식';
+  }
+
+  return '세트, 횟수, 중량, 휴식';
 }
 
 export function hasExerciseGuideVideo(exercise: Exercise): boolean {

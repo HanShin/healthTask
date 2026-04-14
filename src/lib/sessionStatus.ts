@@ -5,9 +5,9 @@ export function getSessionStatusLabel(status: WorkoutSessionStatus): string {
     case 'completed':
       return '완료';
     case 'partial':
-      return '일부 완료';
+      return '부분';
     case 'skipped':
-      return '미완료';
+      return '건너뜀';
     default:
       return status;
   }
