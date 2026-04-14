@@ -77,21 +77,21 @@ export function getExerciseSummary(exercise: Exercise): string {
   const category = getResolvedExerciseCategory(exercise);
 
   if (category === 'cardio') {
-    return '거리, 시간, 평균 속도를 기준으로 유산소 루틴을 설계할 수 있어요.';
+    return '종류, 거리, 시간, 페이스를 기준으로 유산소 루틴을 기록할 수 있어요.';
   }
 
   if (category === 'bodyweight') {
-    return '세트, 횟수, 휴식 시간을 기준으로 맨몸운동 루틴을 설계할 수 있어요.';
+    return '세트, 횟수, 휴식을 기준으로 맨몸운동 루틴을 기록할 수 있어요.';
   }
 
-  return '세트, 횟수, 중량, 휴식 시간을 기준으로 웨이트 루틴을 설계할 수 있어요.';
+  return '세트, 횟수, 중량, 휴식을 기준으로 웨이트 루틴을 기록할 수 있어요.';
 }
 
 export function getExercisePlanningHint(exercise: Exercise): string {
   const category = getResolvedExerciseCategory(exercise);
 
   if (category === 'cardio') {
-    return '거리, 시간, 속도';
+    return '종류, 거리, 시간, 페이스';
   }
 
   if (category === 'bodyweight') {

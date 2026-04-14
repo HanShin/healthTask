@@ -9,14 +9,21 @@ import type {
   SetupInput
 } from '../lib/types';
 import { createId } from '../lib/id';
+import { migrateLegacyExercise } from '../lib/workoutModel';
 
 const catalogCreatedAt = new Date().toISOString();
 
-function exercise<T extends ExerciseInput>(input: T): T & { createdAt: string } {
-  return {
+function exercise<T extends ExerciseInput>(input: T): Exercise {
+  const withTimestamp = {
     ...input,
     createdAt: catalogCreatedAt
   };
+
+  if ('category' in withTimestamp && 'recordMode' in withTimestamp) {
+    return withTimestamp as Exercise;
+  }
+
+  return migrateLegacyExercise(withTimestamp as Exercise);
 }
 
 function strengthItem(

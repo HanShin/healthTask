@@ -61,7 +61,7 @@ describe('getStarterTemplateIds', () => {
     expect(getExerciseKindLabel(cardioExercise)).toBe('유산소');
     expect(getExerciseEquipmentLabel(cardioExercise)).toBe('유산소');
     expect(getExerciseSummary(cardioExercise)).toContain('유산소');
-    expect(getExercisePlanningHint(cardioExercise)).toBe('거리, 시간, 속도');
+    expect(getExercisePlanningHint(cardioExercise)).toBe('종류, 거리, 시간, 페이스');
 
     expect(getExerciseKindLabel(bodyweightExercise)).toBe('맨몸운동');
     expect(getExerciseEquipmentLabel(bodyweightExercise)).toBe('맨몸운동');
