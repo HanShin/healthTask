@@ -19,6 +19,11 @@ const CATEGORY_LABELS: Record<ExerciseCategory, string> = {
   cardio: '유산소',
 };
 
+const LEGACY_CATEGORY_LABELS: Record<LegacyExerciseKind, string> = {
+  strength: '웨이트',
+  running: '유산소',
+};
+
 export function inferLegacyExerciseCategory(
   kind: LegacyExerciseKind,
   equipment?: ExerciseEquipment,
@@ -39,8 +44,14 @@ export function inferLegacyExerciseCategory(
   return 'weight';
 }
 
-export function getExerciseCategoryLabel(category: ExerciseCategory): string {
-  return CATEGORY_LABELS[category];
+export function getExerciseCategoryLabel(
+  category: ExerciseCategory | LegacyExerciseKind,
+): string {
+  if (category in CATEGORY_LABELS) {
+    return CATEGORY_LABELS[category as ExerciseCategory];
+  }
+
+  return LEGACY_CATEGORY_LABELS[category as LegacyExerciseKind];
 }
 
 export function shouldShowWeightField(
