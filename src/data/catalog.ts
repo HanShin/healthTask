@@ -12,7 +12,7 @@ import { createId } from '../lib/id';
 
 const catalogCreatedAt = new Date().toISOString();
 
-function exercise(input: ExerciseInput): Exercise {
+function exercise<T extends ExerciseInput>(input: T): T & { createdAt: string } {
   return {
     ...input,
     createdAt: catalogCreatedAt

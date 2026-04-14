@@ -62,18 +62,32 @@ interface ExerciseBase {
   createdAt: string;
 }
 
-export interface ModernExercise extends ExerciseBase {
-  category: ExerciseCategory;
-  recordMode: RecordMode;
-  kind?: ExerciseKind;
+interface ModernSetExercise extends ExerciseBase {
+  category: 'weight' | 'bodyweight';
+  recordMode: 'sets';
+  kind?: 'strength';
 }
 
-export interface LegacyExercise extends ExerciseBase {
-  kind: ExerciseKind;
-  category?: ExerciseCategory;
-  recordMode?: RecordMode;
+interface ModernCardioExercise extends ExerciseBase {
+  category: 'cardio';
+  recordMode: 'cardio';
+  kind?: 'running';
 }
 
+interface LegacyStrengthExercise extends ExerciseBase {
+  kind: 'strength';
+  category?: never;
+  recordMode?: never;
+}
+
+interface LegacyRunningExercise extends ExerciseBase {
+  kind: 'running';
+  category?: never;
+  recordMode?: never;
+}
+
+export type ModernExercise = ModernSetExercise | ModernCardioExercise;
+export type LegacyExercise = LegacyStrengthExercise | LegacyRunningExercise;
 export type Exercise = ModernExercise | LegacyExercise;
 export type ExerciseInput =
   | Omit<ModernExercise, 'createdAt'>

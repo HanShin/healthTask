@@ -43,6 +43,17 @@ describe('workoutModel helpers', () => {
       createdAt: '2026-04-14T00:00:00.000Z',
     };
 
+    // @ts-expect-error Compatibility kind must match the modern category and record mode.
+    const invalidHybridExercise: Exercise = {
+      id: 'invalid-hybrid-exercise',
+      name: 'Tempo Run',
+      kind: 'strength',
+      category: 'cardio',
+      recordMode: 'cardio',
+      isCustom: false,
+      createdAt: '2026-04-14T00:00:00.000Z',
+    };
+
     const legacyPlan: RoutineDraftItem = {
       id: 'legacy-plan',
       kind: 'strength',
@@ -87,7 +98,8 @@ describe('workoutModel helpers', () => {
     };
 
     expect(exercises).toHaveLength(2);
-    expect(invalidExercise).toBeTruthy();
+    void invalidExercise;
+    void invalidHybridExercise;
     expect(legacyPlan).toBeTruthy();
     expect(modernPlan).toBeTruthy();
     expect(legacyRecord).toBeTruthy();
