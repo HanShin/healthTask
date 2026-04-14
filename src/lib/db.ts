@@ -50,8 +50,8 @@ export class HealthTaskDatabase extends Dexie {
     this.version(4)
       .stores({
         profile: 'id, onboardingDone, updatedAt',
-        exercises: 'id, category, recordMode, name',
-        routines: 'id, kind, isActive, updatedAt',
+        exercises: 'id, category, recordMode, muscleGroup, name',
+        routines: 'id, isActive, updatedAt',
         sessions: 'id, sessionDate, status, routineId, createdAt',
         healthEntries: 'id, recordDate, updatedAt'
       })

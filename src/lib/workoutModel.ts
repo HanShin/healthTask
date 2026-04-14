@@ -19,7 +19,7 @@ export type ExerciseEquipment =
   | 'running';
 
 const BODYWEIGHT_NAME_PATTERN =
-  /\b(push-up|pushup|pull-up|pullup|sit-up|situp|dip|burpee|plank|mountain-climber|air-squat)\b/;
+  /\b(push-up|pushup|pull-up|pullup|chin-up|chinup|sit-up|situp|dip|burpee|plank|mountain-climber|air-squat|bodyweight-squat|bodyweight-reverse-lunge|glute-bridge|hanging-knee-raise|knee-raise|inverted-row)\b/;
 
 const CATEGORY_LABELS: Record<ExerciseCategory, string> = {
   weight: '웨이트',
@@ -107,6 +107,24 @@ function normalizeSetWeights(
   }));
 }
 
+function inferLegacySetCategory(input: {
+  kind?: LegacyExerciseKind;
+  category?: ExerciseCategory;
+  exerciseId?: string;
+}): 'weight' | 'bodyweight' {
+  if (input.category === 'bodyweight') {
+    return 'bodyweight';
+  }
+
+  const inferredCategory = inferLegacyExerciseCategory(
+    input.kind ?? 'strength',
+    undefined,
+    input.exerciseId,
+  );
+
+  return inferredCategory === 'bodyweight' ? 'bodyweight' : 'weight';
+}
+
 export function migrateLegacyExercise(exercise: Exercise): ModernExercise {
   if ('category' in exercise && 'recordMode' in exercise) {
     const category = exercise.category as ExerciseCategory;
@@ -147,28 +165,25 @@ export function migrateLegacyExercise(exercise: Exercise): ModernExercise {
 export function normalizeRoutineItem(
   item: NormalizableRoutineItem,
 ): RoutineDraftItem {
-  if ('category' in item && item.category === 'cardio') {
+  if (
+    item.kind === 'running' ||
+    item.category === 'cardio' ||
+    item.recordMode === 'cardio'
+  ) {
     return {
       ...item,
       category: 'cardio',
       recordMode: 'cardio',
-      targetActivityLabel: item.targetActivityLabel ?? '유산소',
+      targetActivityLabel: item.targetActivityLabel?.trim() || '유산소',
       kind: 'running',
     };
   }
 
-  if ('recordMode' in item && item.recordMode === 'cardio') {
-    return {
-      ...item,
-      category: 'cardio',
-      recordMode: 'cardio',
-      targetActivityLabel: item.targetActivityLabel ?? '유산소',
-      kind: 'running',
-    };
-  }
-
-  const category =
-    item.category === 'bodyweight' ? 'bodyweight' : 'weight';
+  const category = inferLegacySetCategory({
+    kind: item.kind,
+    category: item.category,
+    exerciseId: item.exerciseId,
+  });
 
   return {
     ...item,
@@ -177,6 +192,7 @@ export function normalizeRoutineItem(
     kind: 'strength',
     sets: item.sets ?? 0,
     targetReps: item.targetReps ?? 0,
+    targetWeightKg: category === 'weight' ? item.targetWeightKg ?? 0 : undefined,
   };
 }
 
@@ -197,9 +213,11 @@ export function normalizeWorkoutRecordItem(
     };
   }
 
-  const category = item.category ?? 'weight';
-  const normalizedCategory: 'weight' | 'bodyweight' =
-    category === 'bodyweight' ? 'bodyweight' : 'weight';
+  const normalizedCategory = inferLegacySetCategory({
+    kind: item.kind,
+    category: item.category,
+    exerciseId: item.exerciseId,
+  });
 
   return {
     ...item,

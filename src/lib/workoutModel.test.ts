@@ -121,17 +121,18 @@ describe('workoutModel helpers', () => {
     );
   });
 
-  it('migrates legacy strength exercises to modern category and record mode', () => {
+  it('migrates legacy bodyweight exercises to modern category and record mode', () => {
     expect(
       migrateLegacyExercise({
-        id: 'legacy-strength',
-        name: 'Bench Press',
+        id: 'legacy-bodyweight',
+        name: 'Push Up',
         kind: 'strength',
+        equipment: 'bodyweight',
         isCustom: false,
         createdAt: '2026-04-14T00:00:00.000Z',
       }),
     ).toMatchObject({
-      category: 'weight',
+      category: 'bodyweight',
       recordMode: 'sets',
       kind: 'strength',
     });
@@ -145,12 +146,118 @@ describe('workoutModel helpers', () => {
         order: 1,
         category: 'cardio',
         recordMode: 'cardio',
+        targetActivityLabel: '   ',
       }),
     ).toMatchObject({
       category: 'cardio',
       recordMode: 'cardio',
       targetActivityLabel: '유산소',
       kind: 'running',
+    });
+  });
+
+  it('normalizes legacy running items as cardio plans', () => {
+    expect(
+      normalizeRoutineItem({
+        id: 'legacy-running',
+        exerciseId: 'easy-run',
+        order: 1,
+        kind: 'running',
+        targetDurationMin: 20,
+      }),
+    ).toMatchObject({
+      category: 'cardio',
+      recordMode: 'cardio',
+      targetActivityLabel: '유산소',
+      kind: 'running',
+    });
+  });
+
+  it('infers bodyweight routine items from legacy identifiers', () => {
+    expect(
+      normalizeRoutineItem({
+        id: 'legacy-pushup',
+        exerciseId: 'push-up',
+        order: 1,
+        kind: 'strength',
+        sets: 3,
+        targetReps: 12,
+        targetWeightKg: 0,
+      }),
+    ).toMatchObject({
+      category: 'bodyweight',
+      recordMode: 'sets',
+      kind: 'strength',
+      targetWeightKg: undefined,
+    });
+  });
+
+  it('infers built-in bodyweight identifiers beyond push-up patterns', () => {
+    expect(
+      normalizeRoutineItem({
+        id: 'bodyweight-squat',
+        exerciseId: 'bodyweight-squat',
+        order: 1,
+        kind: 'strength',
+        sets: 3,
+        targetReps: 15,
+      }),
+    ).toMatchObject({
+      category: 'bodyweight',
+      recordMode: 'sets',
+      kind: 'strength',
+      targetWeightKg: undefined,
+    });
+
+    expect(
+      normalizeRoutineItem({
+        id: 'chin-up',
+        exerciseId: 'chin-up',
+        order: 2,
+        kind: 'strength',
+        sets: 3,
+        targetReps: 8,
+      }),
+    ).toMatchObject({
+      category: 'bodyweight',
+      recordMode: 'sets',
+      kind: 'strength',
+      targetWeightKg: undefined,
+    });
+
+    expect(
+      normalizeRoutineItem({
+        id: 'bodyweight-reverse-lunge',
+        exerciseId: 'bodyweight-reverse-lunge',
+        order: 3,
+        kind: 'strength',
+        sets: 3,
+        targetReps: 10,
+      }),
+    ).toMatchObject({
+      category: 'bodyweight',
+      recordMode: 'sets',
+      kind: 'strength',
+      targetWeightKg: undefined,
+    });
+  });
+
+  it('keeps weighted routine items as weight even when the placeholder weight is zero', () => {
+    expect(
+      normalizeRoutineItem({
+        id: 'legacy-bench',
+        exerciseId: 'bench-press',
+        order: 1,
+        kind: 'strength',
+        sets: 3,
+        targetReps: 8,
+        targetWeightKg: 0,
+      }),
+    ).toMatchObject({
+      category: 'weight',
+      recordMode: 'sets',
+      kind: 'strength',
+      targetWeightKg: 0,
     });
   });
 
@@ -179,6 +286,35 @@ describe('workoutModel helpers', () => {
         {
           plannedWeightKg: undefined,
           actualWeightKg: undefined,
+        },
+      ],
+    });
+  });
+
+  it('keeps weighted record placeholders on non-bodyweight exercises', () => {
+    expect(
+      normalizeWorkoutRecordItem({
+        id: 'record-weight',
+        exerciseId: 'bench-press',
+        order: 1,
+        kind: 'strength',
+        sets: [
+          {
+            order: 1,
+            plannedWeightKg: 0,
+            actualWeightKg: 0,
+            completed: false,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      category: 'weight',
+      recordMode: 'sets',
+      kind: 'strength',
+      sets: [
+        {
+          plannedWeightKg: 0,
+          actualWeightKg: 0,
         },
       ],
     });
