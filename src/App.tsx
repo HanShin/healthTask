@@ -22,9 +22,9 @@ function AppRoutes({ ready }: { ready: boolean }) {
     return (
       <div className="app-shell">
         <div className="loading-screen">
-          <div className="loading-screen__badge">앱 준비 중</div>
-          <h1>모바일 루틴 앱을 준비 중입니다.</h1>
-          <p>운동 사전과 로컬 데이터베이스를 불러오고 있어요.</p>
+          <div className="loading-screen__badge">오늘운동 준비 중</div>
+          <h1>오늘운동을 불러오는 중입니다.</h1>
+          <p>운동 기록과 추천 루틴을 정리하고 있어요.</p>
         </div>
       </div>
     );

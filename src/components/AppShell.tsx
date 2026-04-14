@@ -27,46 +27,46 @@ const navItems = [
 const titleMap: Array<{ match: string; title: string; subtitle: string }> = [
   {
     match: '/setup',
-    title: '한신의 운동일지',
-    subtitle: '개인 루틴을 모바일에 맞게 세팅합니다'
+    title: '오늘운동',
+    subtitle: '나에게 맞는 운동 흐름을 시작해요'
   },
   {
     match: '/today/session/',
-    title: '운동 기록',
-    subtitle: '세트와 페이스를 지금 바로 남겨두세요'
+    title: '오늘 기록',
+    subtitle: '지금 한 운동만 간단히 남겨요'
   },
   {
     match: '/today',
-    title: '오늘의 흐름',
-    subtitle: '지금 해야 할 루틴을 한 화면에서 정리합니다'
+    title: '오늘',
+    subtitle: '오늘 할 운동과 최근 흐름을 한 번에 봐요'
   },
   {
     match: '/routines',
-    title: '루틴 스튜디오',
-    subtitle: '내 방식에 맞춘 루틴을 만들고 다듬습니다'
+    title: '루틴',
+    subtitle: '웨이트, 맨몸운동, 유산소 루틴을 정리해요'
   },
   {
     match: '/history/',
-    title: '세션 상세',
-    subtitle: '지난 운동을 세트 단위로 되짚어봅니다'
+    title: '상세 기록',
+    subtitle: '지난 운동을 짧고 선명하게 확인해요'
   },
   {
     match: '/history',
-    title: '기록 아카이브',
-    subtitle: '꾸준함과 변화를 날짜별로 확인합니다'
+    title: '기록',
+    subtitle: '꾸준함과 변화를 빠르게 확인해요'
   },
   {
     match: '/settings',
     title: '설정',
-    subtitle: '백업과 설치 환경을 관리합니다'
+    subtitle: '백업과 보관 상태를 관리해요'
   }
 ];
 
 function getHeaderCopy(pathname: string): { title: string; subtitle: string } {
   return (
     titleMap.find((item) => pathname.startsWith(item.match)) ?? {
-      title: '한신의 운동일지',
-      subtitle: '운동 루틴과 러닝 기록을 한 곳에서 관리합니다'
+      title: '오늘운동',
+      subtitle: '운동 흐름과 기록을 한 곳에서 관리해요'
     }
   );
 }
@@ -86,7 +86,7 @@ export function AppShell({ children }: AppShellProps) {
       <div className="app-shell__ornament app-shell__ornament--bottom" />
 
       <header className="app-header">
-        <div className="app-header__badge">한신의 운동기록</div>
+        <div className="app-header__badge">오늘운동</div>
         <h1>{headerCopy.title}</h1>
         <p>{headerCopy.subtitle}</p>
       </header>

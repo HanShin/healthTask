@@ -7,18 +7,23 @@ import { useRecommendationTemplates } from '../../lib/recommendedTemplates';
 import { createProfile, importBackup } from '../../lib/repository';
 import { isSupabaseConfigured } from '../../lib/supabase';
 import { getCloudBackupKey, setCloudBackupKey } from '../../lib/storage';
-import type { ExerciseKind, RoutineDifficulty, RoutineTemplate } from '../../lib/types';
+import type { RoutineDifficulty, RoutineTemplate, WorkoutTypeSelection } from '../../lib/types';
 
-const workoutTypeOptions: Array<{ label: string; value: ExerciseKind; note: string }> = [
+const workoutTypeOptions: Array<{ label: string; value: WorkoutTypeSelection; note: string }> = [
   {
     label: '웨이트',
-    value: 'strength',
-    note: '세트, 횟수, 중량 중심으로 기록'
+    value: 'weight',
+    note: '세트, 횟수, 중량 중심'
   },
   {
-    label: '러닝',
-    value: 'running',
-    note: '거리, 시간, 페이스 중심으로 기록'
+    label: '맨몸운동',
+    value: 'bodyweight',
+    note: '세트, 횟수, 휴식 중심'
+  },
+  {
+    label: '유산소',
+    value: 'cardio',
+    note: '종류, 거리, 시간, 페이스 중심'
   }
 ];
 
@@ -48,7 +53,7 @@ const starterDifficultyLabelMap: Record<RoutineDifficulty, string> = {
 
 export function SetupPage() {
   const navigate = useNavigate();
-  const [workoutTypes, setWorkoutTypes] = useState<ExerciseKind[]>(['strength', 'running']);
+  const [workoutTypes, setWorkoutTypes] = useState<WorkoutTypeSelection[]>(['weight', 'cardio']);
   const [workoutsPerWeek, setWorkoutsPerWeek] = useState(4);
   const [starterMode, setStarterMode] = useState<'recommended' | 'blank'>('recommended');
   const [starterDifficulty, setStarterDifficulty] = useState<RoutineDifficulty>('beginner');
@@ -77,7 +82,7 @@ export function SetupPage() {
     .map((templateId) => templates.find((template) => template.id === templateId))
     .filter((template): template is RoutineTemplate => Boolean(template));
 
-  function toggleWorkoutType(type: ExerciseKind) {
+  function toggleWorkoutType(type: WorkoutTypeSelection) {
     setWorkoutTypes((previous) => {
       if (previous.includes(type)) {
         return previous.length === 1 ? previous : previous.filter((item) => item !== type);
