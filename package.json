@@ -19,15 +19,15 @@
     "react-router-dom": "latest"
   },
   "devDependencies": {
-    "@testing-library/jest-dom": "latest",
-    "@testing-library/react": "latest",
-    "@testing-library/user-event": "latest",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.0.1",
+    "@testing-library/user-event": "^14.5.2",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
-    "jsdom": "latest",
+    "jsdom": "^25.0.1",
     "typescript": "latest",
-    "vitest": "latest",
+    "vitest": "^2.1.1",
     "vite": "latest",
     "vite-plugin-pwa": "latest"
   }
