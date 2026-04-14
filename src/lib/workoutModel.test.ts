@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { Exercise, RoutineDraftItem, WorkoutRecordItem } from './types';
+import type {
+  Exercise,
+  LegacyExercise,
+  ModernExercise,
+  RoutineDraftItem,
+  WorkoutRecordItem,
+} from './types';
 import {
   deriveRoutineCategorySummary,
   getExerciseCategoryLabel,
@@ -9,8 +15,8 @@ import {
 } from './workoutModel';
 
 describe('workoutModel helpers', () => {
-  it('accepts both legacy and new workout model shapes at the type boundary', () => {
-    const legacyExercise: Exercise = {
+  it('accepts explicit legacy and modern exercise compatibility branches', () => {
+    const legacyExercise: LegacyExercise = {
       id: 'legacy-exercise',
       name: 'Bench Press',
       kind: 'strength',
@@ -18,7 +24,7 @@ describe('workoutModel helpers', () => {
       createdAt: '2026-04-14T00:00:00.000Z',
     };
 
-    const modernExercise: Exercise = {
+    const modernExercise: ModernExercise = {
       id: 'modern-exercise',
       name: 'Push-up',
       category: 'bodyweight',
@@ -26,6 +32,8 @@ describe('workoutModel helpers', () => {
       isCustom: false,
       createdAt: '2026-04-14T00:00:00.000Z',
     };
+
+    const exercises: Exercise[] = [legacyExercise, modernExercise];
 
     const legacyPlan: RoutineDraftItem = {
       id: 'legacy-plan',
@@ -70,6 +78,7 @@ describe('workoutModel helpers', () => {
       ],
     };
 
+    expect(exercises).toHaveLength(2);
     expect(legacyPlan).toBeTruthy();
     expect(modernPlan).toBeTruthy();
     expect(legacyRecord).toBeTruthy();

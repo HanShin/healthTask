@@ -52,18 +52,36 @@ export interface Profile {
   updatedAt: string;
 }
 
-export interface Exercise {
+interface ExerciseBase {
   id: string;
   name: string;
-  category?: ExerciseCategory;
-  recordMode?: RecordMode;
-  kind?: ExerciseKind;
   muscleGroup?: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core';
   equipment?: ExerciseEquipment;
   guide?: ExerciseGuide;
   isCustom: boolean;
   createdAt: string;
 }
+
+export interface ModernExercise extends ExerciseBase {
+  category: ExerciseCategory;
+  recordMode: RecordMode;
+  kind?: ExerciseKind;
+}
+
+export interface LegacyExercise extends ExerciseBase {
+  kind: ExerciseKind;
+  category?: ExerciseCategory;
+  recordMode?: RecordMode;
+}
+
+interface ExerciseCompatibilityBridge extends ExerciseBase {
+  // Temporary bridge for callers flowing through utility types like Omit<Exercise, 'createdAt'>.
+  kind?: ExerciseKind;
+  category?: ExerciseCategory;
+  recordMode?: RecordMode;
+}
+
+export type Exercise = ModernExercise | LegacyExercise | ExerciseCompatibilityBridge;
 
 interface RoutineDraftItemShape {
   id: string;
