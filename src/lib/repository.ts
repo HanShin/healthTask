@@ -1,6 +1,10 @@
 import { getStarterTemplateIds, routineTemplates } from '../data/catalog';
 import { db } from './db';
 import { createId } from './id';
+import {
+  normalizeRoutineItem,
+  normalizeWorkoutRecordItem,
+} from './workoutModel';
 import type {
   BackupPayload,
   Exercise,
@@ -29,17 +33,11 @@ function deriveRoutineKind(items: RoutineDraftItem[]): RoutineKind {
 
 function cloneTemplateItems(items: RoutineDraftItem[]): RoutineDraftItem[] {
   return items.map((item, index) =>
-    item.kind === 'strength'
-      ? {
-          ...item,
-          id: createId('plan'),
-          order: index + 1
-        }
-      : {
-          ...item,
-          id: createId('plan'),
-          order: index + 1
-        }
+    normalizeRoutineItem({
+      ...item,
+      id: createId('plan'),
+      order: index + 1
+    })
   );
 }
 
@@ -107,11 +105,13 @@ export async function saveRoutine(input: {
   routineId?: string;
 }): Promise<void> {
   const timestamp = new Date().toISOString();
-  const items = input.items.map((item, index) => ({
-    ...item,
-    id: item.id || createId('plan'),
-    order: index + 1
-  }));
+  const items = input.items.map((item, index) =>
+    normalizeRoutineItem({
+      ...item,
+      id: item.id || createId('plan'),
+      order: index + 1
+    })
+  );
   const kind = deriveRoutineKind(items);
 
   if (input.routineId) {
@@ -168,11 +168,16 @@ export async function deleteRoutine(routineId: string): Promise<void> {
 }
 
 function deriveSessionStatus(items: WorkoutRecordItem[]): WorkoutSessionStatus {
-  const completedItems = items.filter((item) =>
-    item.kind === 'strength'
-      ? item.sets.length > 0 && item.sets.every((set) => set.completed)
-      : Boolean(item.distanceKm || item.durationMin)
-  ).length;
+  const completedItems = items.filter((item) => {
+    const isCardio =
+      item.recordMode === 'cardio' || item.category === 'cardio' || item.kind === 'running';
+
+    if (isCardio) {
+      return Boolean(item.activityLabel) || Boolean(item.durationMin && item.durationMin > 0);
+    }
+
+    return Boolean(item.sets?.length) && item.sets.every((set) => set.completed);
+  }).length;
 
   if (completedItems === 0) {
     return 'skipped';
@@ -193,6 +198,7 @@ export async function saveWorkoutSession(input: {
   items: WorkoutRecordItem[];
 }): Promise<string> {
   const timestamp = new Date().toISOString();
+  const items = input.items.map((item) => normalizeWorkoutRecordItem(item));
 
   if (input.sessionId) {
     const existing = await db.sessions.get(input.sessionId);
@@ -206,8 +212,8 @@ export async function saveWorkoutSession(input: {
       routineId: input.routineId ?? existing.routineId,
       sessionDate: input.sessionDate,
       memo: input.memo,
-      status: deriveSessionStatus(input.items),
-      items: input.items,
+      status: deriveSessionStatus(items),
+      items,
       endedAt: timestamp
     });
 
@@ -219,8 +225,8 @@ export async function saveWorkoutSession(input: {
     routineId: input.routineId,
     sessionDate: input.sessionDate,
     memo: input.memo,
-    status: deriveSessionStatus(input.items),
-    items: input.items,
+    status: deriveSessionStatus(items),
+    items,
     startedAt: timestamp,
     endedAt: timestamp,
     createdAt: timestamp

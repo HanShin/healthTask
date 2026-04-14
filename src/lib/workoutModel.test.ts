@@ -11,6 +11,9 @@ import {
   deriveRoutineCategorySummary,
   getExerciseCategoryLabel,
   inferLegacyExerciseCategory,
+  migrateLegacyExercise,
+  normalizeRoutineItem,
+  normalizeWorkoutRecordItem,
   shouldShowWeightField,
 } from './workoutModel';
 
@@ -116,6 +119,69 @@ describe('workoutModel helpers', () => {
     expect(inferLegacyExerciseCategory('running', 'running', 'easy-run')).toBe(
       'cardio',
     );
+  });
+
+  it('migrates legacy strength exercises to modern category and record mode', () => {
+    expect(
+      migrateLegacyExercise({
+        id: 'legacy-strength',
+        name: 'Bench Press',
+        kind: 'strength',
+        isCustom: false,
+        createdAt: '2026-04-14T00:00:00.000Z',
+      }),
+    ).toMatchObject({
+      category: 'weight',
+      recordMode: 'sets',
+      kind: 'strength',
+    });
+  });
+
+  it('defaults cardio routine items to the 유산소 activity label', () => {
+    expect(
+      normalizeRoutineItem({
+        id: 'routine-cardio',
+        exerciseId: 'run-1',
+        order: 1,
+        category: 'cardio',
+        recordMode: 'cardio',
+      }),
+    ).toMatchObject({
+      category: 'cardio',
+      recordMode: 'cardio',
+      targetActivityLabel: '유산소',
+      kind: 'running',
+    });
+  });
+
+  it('clears weight values from bodyweight set record items', () => {
+    expect(
+      normalizeWorkoutRecordItem({
+        id: 'record-bodyweight',
+        exerciseId: 'pushup-1',
+        order: 1,
+        category: 'bodyweight',
+        recordMode: 'sets',
+        sets: [
+          {
+            order: 1,
+            plannedWeightKg: 20,
+            actualWeightKg: 10,
+            completed: true,
+          },
+        ],
+      }),
+    ).toMatchObject({
+      category: 'bodyweight',
+      recordMode: 'sets',
+      kind: 'strength',
+      sets: [
+        {
+          plannedWeightKg: undefined,
+          actualWeightKg: undefined,
+        },
+      ],
+    });
   });
 
   it('returns the weight category label', () => {
