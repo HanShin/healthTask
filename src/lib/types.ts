@@ -1,3 +1,10 @@
+import type {
+  ExerciseCategory,
+  ExerciseEquipment,
+  LegacyExerciseKind,
+  RecordMode,
+} from './workoutModel';
+
 export type DayOfWeek =
   | 'mon'
   | 'tue'
@@ -7,8 +14,8 @@ export type DayOfWeek =
   | 'sat'
   | 'sun';
 
-export type ExerciseKind = 'strength' | 'running';
-export type RoutineKind = ExerciseKind | 'hybrid';
+export type ExerciseKind = LegacyExerciseKind;
+export type RoutineKind = ExerciseCategory | 'hybrid';
 export type WorkoutSessionStatus = 'completed' | 'partial' | 'skipped';
 export type RoutineSource = 'manual' | 'template';
 export type RoutineDifficulty = 'beginner' | 'intermediate' | 'advanced';
@@ -32,7 +39,7 @@ export interface ExerciseGuide {
 
 export interface Profile {
   id: 'local-profile';
-  workoutTypes: ExerciseKind[];
+  workoutTypes: ExerciseCategory[];
   workoutsPerWeek: number;
   weeklyGoalCount: number;
   units: {
@@ -47,45 +54,45 @@ export interface Profile {
 export interface Exercise {
   id: string;
   name: string;
-  kind: ExerciseKind;
+  category: ExerciseCategory;
+  recordMode: RecordMode;
   muscleGroup?: 'chest' | 'back' | 'legs' | 'shoulders' | 'arms' | 'core';
-  equipment?:
-    | 'barbell'
-    | 'dumbbell'
-    | 'kettlebell'
-    | 'bodyweight'
-    | 'machine'
-    | 'cable'
-    | 'running';
+  equipment?: ExerciseEquipment;
   guide?: ExerciseGuide;
   isCustom: boolean;
   createdAt: string;
 }
 
-export interface StrengthPlan {
+export interface SetBasedPlan {
   id: string;
-  kind: 'strength';
+  category: 'weight' | 'bodyweight';
+  recordMode: 'sets';
   exerciseId: string;
   order: number;
   sets: number;
   targetReps: number;
-  targetWeightKg?: number;
   restSeconds?: number;
+  targetWeightKg?: number;
   note?: string;
 }
 
-export interface RunningPlan {
+export interface CardioPlan {
   id: string;
-  kind: 'running';
+  category: 'cardio';
+  recordMode: 'cardio';
   exerciseId: string;
   order: number;
+  targetActivityLabel: string;
   targetDistanceKm?: number;
   targetDurationMin?: number;
   targetPaceMinPerKm?: number;
   note?: string;
 }
 
-export type RoutineDraftItem = StrengthPlan | RunningPlan;
+export type RoutineDraftItem = SetBasedPlan | CardioPlan;
+
+export type StrengthPlan = SetBasedPlan;
+export type RunningPlan = CardioPlan;
 
 export interface Routine {
   id: string;
@@ -107,9 +114,10 @@ export interface StrengthSetRecord {
   completed: boolean;
 }
 
-export interface StrengthRecord {
+export interface SetBasedRecord {
   id: string;
-  kind: 'strength';
+  category: 'weight' | 'bodyweight';
+  recordMode: 'sets';
   exerciseId: string;
   routineItemId?: string;
   order: number;
@@ -117,19 +125,24 @@ export interface StrengthRecord {
   note?: string;
 }
 
-export interface RunningRecord {
+export interface CardioRecord {
   id: string;
-  kind: 'running';
+  category: 'cardio';
+  recordMode: 'cardio';
   exerciseId: string;
   routineItemId?: string;
   order: number;
+  activityLabel: string;
   distanceKm?: number;
   durationMin?: number;
   avgPaceMinPerKm?: number;
   note?: string;
 }
 
-export type WorkoutRecordItem = StrengthRecord | RunningRecord;
+export type WorkoutRecordItem = SetBasedRecord | CardioRecord;
+
+export type StrengthRecord = SetBasedRecord;
+export type RunningRecord = CardioRecord;
 
 export interface WorkoutSession {
   id: string;
@@ -166,7 +179,7 @@ export interface RoutineTemplate {
 }
 
 export interface SetupInput {
-  workoutTypes: ExerciseKind[];
+  workoutTypes: ExerciseCategory[];
   workoutsPerWeek: number;
   starterMode: 'recommended' | 'blank';
   starterDifficulty: RoutineDifficulty;
