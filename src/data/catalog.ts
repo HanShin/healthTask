@@ -1,5 +1,6 @@
 import type {
   Exercise,
+  ExerciseInput,
   ExerciseGuide,
   GuideResource,
   RoutineDifficulty,
@@ -11,7 +12,7 @@ import { createId } from '../lib/id';
 
 const catalogCreatedAt = new Date().toISOString();
 
-function exercise(input: Omit<Exercise, 'createdAt'>): Exercise {
+function exercise(input: ExerciseInput): Exercise {
   return {
     ...input,
     createdAt: catalogCreatedAt

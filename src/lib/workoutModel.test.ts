@@ -15,7 +15,7 @@ import {
 } from './workoutModel';
 
 describe('workoutModel helpers', () => {
-  it('accepts explicit legacy and modern exercise compatibility branches', () => {
+  it('accepts explicit modern and legacy exercise branches only', () => {
     const legacyExercise: LegacyExercise = {
       id: 'legacy-exercise',
       name: 'Bench Press',
@@ -34,6 +34,14 @@ describe('workoutModel helpers', () => {
     };
 
     const exercises: Exercise[] = [legacyExercise, modernExercise];
+
+    // @ts-expect-error Exercise must keep either the modern fields or the legacy kind.
+    const invalidExercise: Exercise = {
+      id: 'invalid-exercise',
+      name: 'Air Squat',
+      isCustom: false,
+      createdAt: '2026-04-14T00:00:00.000Z',
+    };
 
     const legacyPlan: RoutineDraftItem = {
       id: 'legacy-plan',
@@ -79,6 +87,7 @@ describe('workoutModel helpers', () => {
     };
 
     expect(exercises).toHaveLength(2);
+    expect(invalidExercise).toBeTruthy();
     expect(legacyPlan).toBeTruthy();
     expect(modernPlan).toBeTruthy();
     expect(legacyRecord).toBeTruthy();

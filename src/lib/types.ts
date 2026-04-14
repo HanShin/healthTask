@@ -74,14 +74,10 @@ export interface LegacyExercise extends ExerciseBase {
   recordMode?: RecordMode;
 }
 
-interface ExerciseCompatibilityBridge extends ExerciseBase {
-  // Temporary bridge for callers flowing through utility types like Omit<Exercise, 'createdAt'>.
-  kind?: ExerciseKind;
-  category?: ExerciseCategory;
-  recordMode?: RecordMode;
-}
-
-export type Exercise = ModernExercise | LegacyExercise | ExerciseCompatibilityBridge;
+export type Exercise = ModernExercise | LegacyExercise;
+export type ExerciseInput =
+  | Omit<ModernExercise, 'createdAt'>
+  | Omit<LegacyExercise, 'createdAt'>;
 
 interface RoutineDraftItemShape {
   id: string;
