@@ -37,7 +37,7 @@ function getSessionExerciseMeta(item: WorkoutRecordItem): string {
     return `${completedSetCount}/${item.sets.length}세트`;
   }
 
-  return item.avgPaceMinPerKm ? `${item.avgPaceMinPerKm}분/km 페이스` : '러닝 기록';
+  return item.avgPaceMinPerKm ? `${item.avgPaceMinPerKm}분/km 페이스` : '유산소 기록';
 }
 
 function getSessionSummary(session: WorkoutSession) {
@@ -50,7 +50,7 @@ function getSessionSummary(session: WorkoutSession) {
   return {
     workoutCount: `${session.items.length}개 운동`,
     volumeCopy:
-      strengthSetCount > 0 ? `${strengthSetCount}세트` : runningCount > 0 ? `${runningCount}개 러닝` : '기록 없음'
+      strengthSetCount > 0 ? `${strengthSetCount}세트` : runningCount > 0 ? `${runningCount}개 유산소` : '기록 없음'
   };
 }
 
@@ -109,6 +109,7 @@ export function TodayPage() {
         <div className="hero-card__label">{formatKoreanDate(new Date())}</div>
         <h2>{weeklyCompletion.completed} / {weeklyCompletion.goal}회</h2>
         <p>이번 주 진행률 {weeklyCompletion.percent}% · {getWeekMomentumLabel(sessions)}</p>
+        <div className="hero-card__note">{recommendation}</div>
 
         <div className="stat-grid">
           <div className="stat-pill">
@@ -139,10 +140,6 @@ export function TodayPage() {
             </div>
           ))}
         </div>
-      </SectionCard>
-
-      <SectionCard title="오늘 추천">
-        <p className="lead-copy">{recommendation}</p>
       </SectionCard>
 
       {todayRoutine ? (
@@ -211,7 +208,7 @@ export function TodayPage() {
       <SectionCard title="최근 기록">
         {recentSessions.length > 0 ? (
           <div className="stack-list">
-            {recentSessions.map((session) => {
+            {recentSessions.slice(0, 3).map((session) => {
               const summary = getSessionSummary(session);
               const previewItems = session.items.slice(0, 2);
               const hiddenItemCount = Math.max(session.items.length - previewItems.length, 0);
@@ -250,6 +247,9 @@ export function TodayPage() {
                 </Link>
               );
             })}
+            {recentSessions.length > 3 ? (
+              <p className="muted-copy">최근 3개 기록만 먼저 보여줘요.</p>
+            ) : null}
           </div>
         ) : (
           <p className="muted-copy">첫 운동을 기록하면 여기에 최근 흐름이 쌓입니다.</p>

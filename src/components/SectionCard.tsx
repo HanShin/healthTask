@@ -17,7 +17,7 @@ export function SectionCard({ eyebrow, title, action, children }: SectionCardPro
         </div>
         {action ? <div className="panel__action">{action}</div> : null}
       </div>
-      {children}
+      <div className="panel__body">{children}</div>
     </section>
   );
 }

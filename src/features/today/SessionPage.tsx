@@ -11,11 +11,9 @@ import {
   getExerciseGroupLabel,
   getExerciseKindLabel,
   getExercisePlanningHint,
-  getExerciseSummary,
   getExerciseTargetLabel,
   hasExerciseGuideVideo
 } from '../../lib/exercise';
-import { paceToSpeedKmh, speedToPaceMinPerKm } from '../../lib/format';
 import { createId } from '../../lib/id';
 import { saveWorkoutSession } from '../../lib/repository';
 import { getStrengthCarryover } from '../../lib/workoutRecord';
@@ -39,7 +37,7 @@ const muscleFilterOptions: Array<{ value: MuscleFilter; label: string }> = [
   { value: 'shoulders', label: '어깨' },
   { value: 'arms', label: '팔' },
   { value: 'core', label: '코어' },
-  { value: 'running', label: '러닝' }
+  { value: 'running', label: '유산소' }
 ];
 
 function buildDraftItems(routine: Routine, sessions: WorkoutSession[]) {
@@ -453,8 +451,8 @@ export function SessionPage() {
         <h2>{items.length}개 운동</h2>
         <p>
           {editingSession
-            ? '저장한 기록을 다시 수정할 수 있어요. 실수한 완료 체크나 유산소 수치도 바로 고치면 됩니다.'
-            : '지난 기록을 참고값으로 채워두었어요. 실제로 한 세트만 완료 체크해가며 기록하면 됩니다.'}
+            ? '저장한 기록을 바로 고칠 수 있어요. 완료 체크와 유산소 수치도 수정됩니다.'
+            : '지난 기록을 참고값으로 채워뒀어요. 실제 수행값만 체크해 주세요.'}
         </p>
       </section>
 
@@ -500,7 +498,7 @@ export function SessionPage() {
                       <div>
                         <h3>{exerciseMap.get(item.exerciseId) ?? '운동'}</h3>
                         <span>
-                          {index + 1}번 운동 · {item.kind === 'strength' ? '웨이트' : '러닝'} ·{' '}
+                          {index + 1}번 운동 · {item.kind === 'strength' ? '웨이트' : '유산소'} ·{' '}
                           {getWorkoutProgressCopy(item)}
                         </span>
                       </div>
@@ -625,18 +623,14 @@ export function SessionPage() {
                         />
                       </label>
                       <label className="field">
-                        <span>평균 속도 (km/h)</span>
+                        <span>페이스 (분/km)</span>
                         <input
                           type="number"
-                          min="0.5"
+                          min="0"
                           step="0.1"
-                          value={paceToSpeedKmh(item.avgPaceMinPerKm) ?? 0}
+                          value={item.avgPaceMinPerKm ?? 0}
                           onChange={(event) =>
-                            updateRunningItem(
-                              item.id,
-                              'avgPaceMinPerKm',
-                              speedToPaceMinPerKm(event.currentTarget.valueAsNumber) ?? 0
-                            )
+                            updateRunningItem(item.id, 'avgPaceMinPerKm', event.currentTarget.valueAsNumber || 0)
                           }
                         />
                       </label>
@@ -671,7 +665,7 @@ export function SessionPage() {
             <div className="modal-sheet__header">
               <div>
                 <h2>이번 기록에 운동 추가</h2>
-                <p className="muted-copy">여기서 추가한 운동은 이번 세션 기록에 바로 반영됩니다.</p>
+                <p className="muted-copy">고른 운동은 이번 기록에 바로 들어갑니다.</p>
               </div>
               <button className="ghost-button" type="button" onClick={closeExercisePicker}>
                 닫기
@@ -718,7 +712,7 @@ export function SessionPage() {
               <div className="exercise-browser">
                 <div className="exercise-browser__summary">
                   <strong>{filteredExercises.length}개</strong>
-                  <span>현재 조건에 맞는 운동</span>
+                  <span>조건에 맞는 운동</span>
                 </div>
 
                 {groupedExerciseEntries.length > 0 ? (
@@ -735,23 +729,13 @@ export function SessionPage() {
                               <div className="exercise-option__body">
                                 <div className="exercise-option__copy">
                                   <strong>{exercise.name}</strong>
-                                  <p>{getExerciseSummary(exercise)}</p>
+                                  <p>{getExercisePlanningHint(exercise)}</p>
                                 </div>
                                 <div className="chip-row exercise-option__chips">
                                   <span className="chip">{getExerciseKindLabel(exercise)}</span>
                                   <span className="chip">{getExerciseTargetLabel(exercise)}</span>
                                   <span className="chip">{getExerciseEquipmentLabel(exercise)}</span>
                                   {hasExerciseGuideVideo(exercise) ? <span className="chip">영상 가이드</span> : null}
-                                </div>
-                                <div className="exercise-option__fact-grid">
-                                  <div className="exercise-option__fact">
-                                    <span>주요 부위</span>
-                                    <strong>{getExerciseTargetLabel(exercise)}</strong>
-                                  </div>
-                                  <div className="exercise-option__fact">
-                                    <span>설계 포인트</span>
-                                    <strong>{getExercisePlanningHint(exercise)}</strong>
-                                  </div>
                                 </div>
                               </div>
                               <div className="exercise-option__actions">

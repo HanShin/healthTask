@@ -41,10 +41,10 @@ export const workoutMetricMeta: Record<
     emptyLabel: '완료된 웨이트 세트가 쌓이면 여기서 흐름을 볼 수 있어요.'
   },
   runningDistanceKm: {
-    label: '러닝 거리',
+    label: '유산소 거리',
     unit: 'km',
     digits: 1,
-    emptyLabel: '러닝 기록이 생기면 거리 추이가 표시됩니다.'
+    emptyLabel: '유산소 기록이 생기면 거리 추이가 표시됩니다.'
   }
 };
 

@@ -80,7 +80,7 @@ export function SessionDetailPage() {
             <article key={item.id} className="session-card">
               <div className="session-card__title">
                 <h3>{exerciseMap.get(item.exerciseId) ?? '운동'}</h3>
-                <span>{item.kind === 'strength' ? '웨이트' : '러닝'}</span>
+                <span>{item.kind === 'strength' ? '웨이트' : '유산소'}</span>
               </div>
 
               {item.kind === 'strength' ? (

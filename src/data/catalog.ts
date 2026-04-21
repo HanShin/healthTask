@@ -331,9 +331,9 @@ const guidePresets = {
     resources: [
       youtubeResource(
         'Ggbm_coe5uM',
-        '달리기 러닝 전 이 영상을 생각해 주세요. 기본 자세 3가지 간단하게 정리했습니다. (처음 운동 하시는 분들을 위해 쉽게 정리했습니다.) #러닝 #자세 #달리기',
+        '유산소 전 기본 자세 3가지',
         '런앤다이어트',
-        '이지 런 전 기본 자세 3가지를 짧게 다시 확인하기 좋은 한국 영상입니다.'
+        '가벼운 유산소 전에 기본 자세 3가지를 짧게 다시 확인하기 좋은 한국 영상입니다.'
       )
     ]
   },
@@ -344,9 +344,9 @@ const guidePresets = {
     resources: [
       youtubeResource(
         'GpQ21f1b-cg',
-        '올바른 러닝 자세',
+        '유산소 자세와 착지 리듬',
         'RUNUP TV / 런업TV',
-        '템포 런에서 무너지기 쉬운 상체와 착지 리듬을 복습하기 좋습니다.'
+        '템포 유산소에서 무너지기 쉬운 상체와 착지 리듬을 복습하기 좋습니다.'
       )
     ]
   },
@@ -357,9 +357,9 @@ const guidePresets = {
     resources: [
       youtubeResource(
         'ewHVH6-udbg',
-        '마라톤 달리기 러닝 자세 교정 기본 동작 3가지 #마라톤 #달리기 #러닝 #자세교정',
+        '장거리 유산소 자세 교정 3가지',
         '런앤다이어트',
-        '롱런 전에 자세가 무너지지 않도록 기본 동작 3가지를 빠르게 점검하기 좋은 한국 영상입니다.'
+        '긴 유산소 전에 자세가 무너지지 않도록 기본 동작 3가지를 빠르게 점검하기 좋은 한국 영상입니다.'
       )
     ]
   }
@@ -777,7 +777,7 @@ export const exerciseCatalog: Exercise[] = [
   }),
   exercise({
     id: 'easy-run',
-    name: '이지 런',
+    name: '가벼운 유산소',
     kind: 'running',
     equipment: 'running',
     guide: guidePresets.runningEasy,
@@ -785,7 +785,7 @@ export const exerciseCatalog: Exercise[] = [
   }),
   exercise({
     id: 'tempo-run',
-    name: '템포 런',
+    name: '템포 유산소',
     kind: 'running',
     equipment: 'running',
     guide: guidePresets.runningTempo,
@@ -793,7 +793,7 @@ export const exerciseCatalog: Exercise[] = [
   }),
   exercise({
     id: 'long-run',
-    name: '롱 런',
+    name: '지구력 유산소',
     kind: 'running',
     equipment: 'running',
     guide: guidePresets.runningLong,
@@ -804,7 +804,7 @@ export const exerciseCatalog: Exercise[] = [
 export const routineTemplates: RoutineTemplate[] = [
   {
     id: 'template-dumbbell-upper',
-    name: 'Dumbbell Push Pull',
+    name: '덤벨 밀기·당기기',
     blurb: '아령 위주로 상체 밀기와 당기기를 균형 있게 구성한 루틴',
     focus: '덤벨 위주',
     difficulty: 'intermediate',
@@ -819,7 +819,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-dumbbell-lower',
-    name: 'Dumbbell Lower Builder',
+    name: '덤벨 하체 빌드',
     blurb: '스쿼트, 힙힌지, 단측 하체를 아령으로 채우는 하체 루틴',
     focus: '덤벨 위주',
     difficulty: 'intermediate',
@@ -834,7 +834,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-freeweight-full',
-    name: 'Freeweight Full Body',
+    name: '프리웨이트 전신',
     blurb: '장비가 많지 않아도 바로 돌릴 수 있는 덤벨 전신 루틴',
     focus: '프리웨이트 입문',
     difficulty: 'beginner',
@@ -850,7 +850,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-kettlebell-flow',
-    name: 'Kettlebell Flow',
+    name: '케틀벨 플로우',
     blurb: '케틀벨만으로 하체, 코어, 전신 협응을 함께 끌어올리는 루틴',
     focus: '케틀벨 위주',
     difficulty: 'intermediate',
@@ -865,7 +865,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-dumbbell-hybrid',
-    name: 'Freeweight + Run',
+    name: '프리웨이트 + 유산소',
     blurb: '덤벨 전신 자극 후 가볍게 유산소까지 연결하는 혼합 루틴',
     focus: '덤벨 + 유산소',
     difficulty: 'intermediate',
@@ -880,7 +880,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-bodyweight-foundation',
-    name: 'Bodyweight Foundation',
+    name: '맨몸운동 기초',
     blurb: '맨몸 기본 패턴으로 전신 밸런스와 운동 습관을 만들기 좋은 루틴',
     focus: '맨몸 기본기',
     difficulty: 'beginner',
@@ -895,7 +895,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-bodyweight-upper-core',
-    name: 'Bodyweight Upper + Core',
+    name: '맨몸운동 상체 + 코어',
     blurb: '푸시업과 맨몸 당기기 패턴, 코어를 함께 묶은 상체 중심 루틴',
     focus: '맨몸 상체',
     difficulty: 'intermediate',
@@ -911,7 +911,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-bodyweight-lower-stability',
-    name: 'Bodyweight Lower Stability',
+    name: '맨몸운동 하체 안정화',
     blurb: '맨몸 스쿼트와 런지, 힙 브리지로 하체 안정성과 균형을 다지는 루틴',
     focus: '맨몸 하체',
     difficulty: 'beginner',
@@ -926,7 +926,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-travel-reset',
-    name: 'Travel Reset',
+    name: '가벼운 리셋',
     blurb: '출장이나 여행 중에도 침대 옆 공간에서 바로 할 수 있는 맨몸 리셋 루틴',
     focus: '맨몸 미니멀',
     difficulty: 'beginner',
@@ -941,7 +941,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-pullup-bar-builder',
-    name: 'Pull-up Bar Builder',
+    name: '철봉 기초 빌드',
     blurb: '철봉을 중심으로 등, 팔, 코어를 단계적으로 강화하는 루틴',
     focus: '철봉 기본기',
     difficulty: 'intermediate',
@@ -956,7 +956,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-pullup-bar-volume',
-    name: 'Pull-up Bar Volume Day',
+    name: '철봉 볼륨 데이',
     blurb: '풀업 볼륨과 맨몸 보조 운동으로 철봉 횟수를 늘리기 좋은 루틴',
     focus: '철봉 볼륨',
     difficulty: 'advanced',
@@ -971,7 +971,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-pullup-bar-core',
-    name: 'Bar + Core Control',
+    name: '철봉 + 코어 컨트롤',
     blurb: '철봉 매달리기, 친업, 행잉 레이즈로 상체 통제와 코어를 함께 잡는 루틴',
     focus: '철봉 + 코어',
     difficulty: 'advanced',
@@ -986,7 +986,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-dumbbell-push-builder',
-    name: 'Dumbbell Push Builder',
+    name: '덤벨 밀기 빌드',
     blurb: '가슴과 어깨, 삼두를 아령만으로 채우는 밀기 중심 루틴',
     focus: '아령 밀기',
     difficulty: 'intermediate',
@@ -1001,7 +1001,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-dumbbell-pull-lower',
-    name: 'Dumbbell Pull + Lower',
+    name: '덤벨 당기기 + 하체',
     blurb: '로우와 힙힌지, 단측 하체를 섞어 균형을 챙기는 아령 루틴',
     focus: '아령 균형형',
     difficulty: 'intermediate',
@@ -1016,7 +1016,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-dumbbell-strength-circuit',
-    name: 'Dumbbell Strength Circuit',
+    name: '덤벨 근력 서킷',
     blurb: '전신 자극을 고르게 담아 집에서도 돌리기 쉬운 아령 루틴',
     focus: '아령 전신',
     difficulty: 'beginner',
@@ -1032,7 +1032,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-dumbbell-aesthetic-upper',
-    name: 'Dumbbell Aesthetic Upper',
+    name: '덤벨 상체 볼륨',
     blurb: '프레스, 레이즈, 컬을 묶어 상체 볼륨을 채우는 아령 루틴',
     focus: '아령 상체 볼륨',
     difficulty: 'advanced',
@@ -1048,7 +1048,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-kettlebell-strength-base',
-    name: 'Kettlebell Strength Base',
+    name: '케틀벨 근력 기초',
     blurb: '스윙과 스쿼트, 프레스로 케틀벨 기본 패턴을 탄탄하게 만드는 루틴',
     focus: '케틀벨 기본기',
     difficulty: 'beginner',
@@ -1063,7 +1063,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-kettlebell-conditioning-ladder',
-    name: 'Kettlebell Conditioning Ladder',
+    name: '케틀벨 컨디셔닝 래더',
     blurb: '짧은 휴식으로 심폐와 전신 협응을 함께 끌어올리는 케틀벨 루틴',
     focus: '케틀벨 컨디셔닝',
     difficulty: 'advanced',
@@ -1078,7 +1078,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-kettlebell-stability-core',
-    name: 'Kettlebell Stability Core',
+    name: '케틀벨 안정화 코어',
     blurb: '겟업과 헤일로, 스쿼트로 몸통 안정성과 전신 제어를 키우는 루틴',
     focus: '케틀벨 안정성',
     difficulty: 'advanced',
@@ -1093,7 +1093,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-upper',
-    name: 'Upper Momentum',
+    name: '상체 모멘텀',
     blurb: '가슴과 등을 한 번에 밀어올리는 상체 루틴',
     focus: '웨이트 주력',
     difficulty: 'intermediate',
@@ -1108,7 +1108,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-lower',
-    name: 'Lower Power',
+    name: '하체 파워',
     blurb: '하체 중량과 안정성을 끌어올리는 기본 루틴',
     focus: '웨이트 주력',
     difficulty: 'advanced',
@@ -1123,7 +1123,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-full',
-    name: 'Full Body Express',
+    name: '전신 익스프레스',
     blurb: '주 3회 기준으로 운영하기 쉬운 전신 루틴',
     focus: '웨이트 입문',
     difficulty: 'beginner',
@@ -1138,7 +1138,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-hybrid',
-    name: 'Hybrid Reset',
+    name: '하이브리드 리셋',
     blurb: '하체 자극 후 짧은 유산소로 마무리하는 혼합 루틴',
     focus: '웨이트 + 유산소',
     difficulty: 'intermediate',
@@ -1152,7 +1152,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-easy-run',
-    name: 'Easy Run Base',
+    name: '쉬운 유산소 베이스',
     blurb: '주간 유산소 빈도를 채우기 좋은 회복성 유산소',
     focus: '유산소 베이스',
     difficulty: 'beginner',
@@ -1162,7 +1162,7 @@ export const routineTemplates: RoutineTemplate[] = [
   },
   {
     id: 'template-tempo-run',
-    name: 'Tempo Sharpener',
+    name: '템포 유산소 샤프닝',
     blurb: '조금 빠른 페이스 감각을 익히는 템포 유산소',
     focus: '유산소 향상',
     difficulty: 'advanced',

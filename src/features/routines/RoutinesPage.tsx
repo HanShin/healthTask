@@ -13,7 +13,6 @@ import {
   getExerciseTargetLabel,
   hasExerciseGuideVideo
 } from '../../lib/exercise';
-import { paceToSpeedKmh, speedToPaceMinPerKm } from '../../lib/format';
 import { createId } from '../../lib/id';
 import { useRecommendationTemplates } from '../../lib/recommendedTemplates';
 import { deleteRoutine, installTemplate, saveRoutine } from '../../lib/repository';
@@ -112,7 +111,7 @@ const muscleFilterOptions: Array<{ value: MuscleFilter; label: string }> = [
   { value: 'shoulders', label: '어깨' },
   { value: 'arms', label: '팔' },
   { value: 'core', label: '코어' },
-  { value: 'running', label: '러닝' }
+  { value: 'running', label: '유산소' }
 ];
 
 const templateDifficultyOptions: Array<{ value: TemplateDifficultyFilter; label: string }> = [
@@ -340,43 +339,51 @@ function RoutineEditor({
 
         <div className="stack-list">
           {!initialRoutine ? (
-            <section className="template-launcher">
-              <div className="field">
-                <span>추천 템플릿으로 빠르게 시작</span>
-                <p className="muted-copy">
-                  새 루틴을 직접 짜기 전에, 템플릿으로 바로 시작한 뒤 내 스타일에 맞게 수정할 수도 있어요.
-                </p>
-                <p className="muted-copy">
-                  {templateSyncError
-                    ? templateSyncError
-                    : lastTemplateSyncAt
-                      ? `마지막 갱신 ${new Intl.DateTimeFormat('ko-KR', {
-                          month: 'long',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        }).format(new Date(lastTemplateSyncAt))}`
-                      : '앱이 열려 있는 동안 추천 템플릿을 주기적으로 다시 확인합니다.'}
-                </p>
+            <details className="compact-details">
+              <summary className="compact-details__summary">
+                <div>
+                  <strong>추천 템플릿으로 시작</strong>
+                  <p>빈 화면에서 바로 시작하기 어려우면 템플릿을 먼저 불러와요.</p>
+                </div>
+                <span>열기</span>
+              </summary>
+              <div className="compact-details__content">
+                <section className="template-launcher">
+                  <div className="field">
+                    <span>추천 템플릿</span>
+                    <p className="muted-copy">
+                      {templateSyncError
+                        ? templateSyncError
+                        : lastTemplateSyncAt
+                          ? `마지막 갱신 ${new Intl.DateTimeFormat('ko-KR', {
+                              month: 'long',
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit'
+                            }).format(new Date(lastTemplateSyncAt))}`
+                          : '앱이 열려 있는 동안 템플릿을 주기적으로 다시 확인합니다.'}
+                    </p>
+                  </div>
+                  <div className="button-row">
+                    <button
+                      className="ghost-button template-launcher__button"
+                      type="button"
+                      onClick={() => setIsTemplatePickerOpen(true)}
+                    >
+                      추천 템플릿 보기
+                    </button>
+                    <button
+                      className="ghost-button ghost-button--compact"
+                      type="button"
+                      onClick={() => void onRefreshTemplates()}
+                      disabled={isRefreshingTemplates}
+                    >
+                      {isRefreshingTemplates ? '갱신 중...' : '지금 갱신'}
+                    </button>
+                  </div>
+                </section>
               </div>
-              <div className="button-row">
-                <button
-                  className="ghost-button template-launcher__button"
-                  type="button"
-                  onClick={() => setIsTemplatePickerOpen(true)}
-                >
-                  추천 템플릿 보기
-                </button>
-                <button
-                  className="ghost-button ghost-button--compact"
-                  type="button"
-                  onClick={() => void onRefreshTemplates()}
-                  disabled={isRefreshingTemplates}
-                >
-                  {isRefreshingTemplates ? '갱신 중...' : '지금 갱신'}
-                </button>
-              </div>
-            </section>
+            </details>
           ) : null}
 
           <label className="field">
@@ -384,7 +391,7 @@ function RoutineEditor({
             <input
               type="text"
               value={name}
-              placeholder="예: 상체 + 템포 런"
+              placeholder="예: 상체 + 템포 유산소"
               onChange={(event) => setName(event.target.value)}
             />
           </label>
@@ -393,130 +400,115 @@ function RoutineEditor({
             <span>주간 순서</span>
             <p className="muted-copy">
               {initialRoutine
-                ? `이 루틴은 저장 순서 기준 ${sequenceNumber}번째 순환 루틴입니다. 이번 주 운동을 하나 끝낼 때마다 다음 순서로 넘어가고, 새 주가 시작되면 다시 1번째 루틴부터 시작해요.`
-                : `지금 저장하면 ${sequenceNumber}번째 순환 루틴으로 추가됩니다. 이번 주 운동을 하나 끝낼 때마다 다음 순서로 넘어가고, 새 주가 시작되면 다시 1번째 루틴부터 시작해요.`}
+                ? `이 루틴은 현재 ${sequenceNumber}번째 순서입니다. 새 주가 시작되면 다시 1번째부터 돌아가요.`
+                : `지금 저장하면 ${sequenceNumber}번째 순서로 들어갑니다. 새 주가 시작되면 다시 1번째부터 돌아가요.`}
             </p>
           </div>
 
-          <div className="field">
-            <span>운동 추가</span>
-            <div className="chip-row">
-              {equipmentFilterOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`chip chip--button${equipmentFilter === option.value ? ' is-active' : ''}`}
-                  onClick={() => setEquipmentFilter(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <div className="chip-row">
-              {muscleFilterOptions.map((option) => (
-                <button
-                  key={option.value}
-                  type="button"
-                  className={`chip chip--button${muscleFilter === option.value ? ' is-active' : ''}`}
-                  onClick={() => setMuscleFilter(option.value)}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            <p className="muted-copy">장비와 부위를 먼저 좁히고, 검색어를 입력하면 러닝 같은 유산소 운동도 바로 찾을 수 있어요.</p>
-            <div className="inline-form inline-form--stack">
-              <input
-                type="search"
-                value={search}
-                placeholder="운동 검색"
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-            <div className="exercise-browser">
-              <div className="exercise-browser__summary">
-                <strong>{filteredExercises.length}개</strong>
-                <span>현재 조건에 맞는 운동</span>
+          <details className="compact-details" open={items.length === 0 ? true : undefined}>
+            <summary className="compact-details__summary">
+              <div>
+                <strong>운동 추가</strong>
+                <p>{filteredExercises.length}개 운동을 바로 추가할 수 있어요.</p>
               </div>
+              <span>열기</span>
+            </summary>
+            <div className="compact-details__content stack-list">
+              <div className="chip-row">
+                {equipmentFilterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`chip chip--button${equipmentFilter === option.value ? ' is-active' : ''}`}
+                    onClick={() => setEquipmentFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <div className="chip-row">
+                {muscleFilterOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={`chip chip--button${muscleFilter === option.value ? ' is-active' : ''}`}
+                    onClick={() => setMuscleFilter(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <p className="muted-copy">장비나 부위를 먼저 고르고, 검색으로 빠르게 좁혀서 추가해요.</p>
+              <div className="inline-form inline-form--stack">
+                <input
+                  type="search"
+                  value={search}
+                  placeholder="운동 검색"
+                  onChange={(event) => setSearch(event.target.value)}
+                />
+              </div>
+              <div className="exercise-browser">
+                <div className="exercise-browser__summary">
+                  <strong>{filteredExercises.length}개</strong>
+                  <span>조건에 맞는 운동</span>
+                </div>
 
-              {groupedExerciseEntries.length > 0 ? (
-                <div className="exercise-group-stack">
-                  {groupedExerciseEntries.map(([groupLabel, groupExercises]) => (
-                    <section key={groupLabel} className="exercise-group">
-                      <div className="exercise-group__header">
-                        <h3>{groupLabel}</h3>
-                        <span>{groupExercises.length}개</span>
-                      </div>
-                      <div className="exercise-option-grid">
-                        {groupExercises.map((exercise) => (
-                          <article key={exercise.id} className="exercise-option">
-                            <div className="exercise-option__body">
-                              <div className="exercise-option__copy">
-                                <strong>{exercise.name}</strong>
-                                <p>{getExerciseSummary(exercise)}</p>
-                              </div>
-                              <div className="chip-row exercise-option__chips">
-                                <span className="chip">{getExerciseKindLabel(exercise)}</span>
-                                <span className="chip">{getExerciseTargetLabel(exercise)}</span>
-                                <span className="chip">{getExerciseEquipmentLabel(exercise)}</span>
-                                {hasExerciseGuideVideo(exercise) ? <span className="chip">영상 가이드</span> : null}
-                              </div>
-                              <div className="exercise-option__fact-grid">
-                                <div className="exercise-option__fact">
-                                  <span>주요 부위</span>
-                                  <strong>{getExerciseTargetLabel(exercise)}</strong>
+                {groupedExerciseEntries.length > 0 ? (
+                  <div className="exercise-group-stack">
+                    {groupedExerciseEntries.map(([groupLabel, groupExercises]) => (
+                      <section key={groupLabel} className="exercise-group">
+                        <div className="exercise-group__header">
+                          <h3>{groupLabel}</h3>
+                          <span>{groupExercises.length}개</span>
+                        </div>
+                        <div className="exercise-option-grid">
+                          {groupExercises.map((exercise) => (
+                            <article key={exercise.id} className="exercise-option">
+                              <div className="exercise-option__body">
+                                <div className="exercise-option__copy">
+                                  <strong>{exercise.name}</strong>
+                                  <p>{getExercisePlanningHint(exercise)}</p>
                                 </div>
-                                <div className="exercise-option__fact">
-                                  <span>설계 포인트</span>
-                                  <strong>{getExercisePlanningHint(exercise)}</strong>
+                                <div className="chip-row exercise-option__chips">
+                                  <span className="chip">{getExerciseKindLabel(exercise)}</span>
+                                  <span className="chip">{getExerciseTargetLabel(exercise)}</span>
+                                  <span className="chip">{getExerciseEquipmentLabel(exercise)}</span>
+                                  {hasExerciseGuideVideo(exercise) ? <span className="chip">영상 가이드</span> : null}
                                 </div>
                               </div>
-                              {exercise.guide?.cues?.length ? (
-                                <ul className="exercise-points">
-                                  {exercise.guide.cues.slice(0, 2).map((cue) => (
-                                    <li key={cue}>{cue}</li>
-                                  ))}
-                                </ul>
-                              ) : (
-                                <p className="exercise-option__hint">
-                                  {exercise.kind === 'running'
-                                    ? '거리, 시간, 속도를 정해두면 유산소 루틴을 훨씬 편하게 관리할 수 있어요.'
-                                    : '루틴에 추가한 뒤 세트, 반복, 중량, 휴식까지 바로 설계할 수 있어요.'}
-                                </p>
-                              )}
-                            </div>
-                            <div className="exercise-option__meta">
-                              {exercise.guide ? <span className="chip">가이드</span> : null}
-                            </div>
-                            <div className="exercise-option__actions">
-                              {exercise.guide ? (
+                              <div className="exercise-option__meta">
+                                {exercise.guide ? <span className="chip">가이드</span> : null}
+                              </div>
+                              <div className="exercise-option__actions">
+                                {exercise.guide ? (
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    onClick={() => setGuideExerciseId(exercise.id)}
+                                  >
+                                    자세 보기
+                                  </button>
+                                ) : null}
                                 <button
                                   type="button"
                                   className="ghost-button"
-                                  onClick={() => setGuideExerciseId(exercise.id)}
+                                  onClick={() => addExercise(exercise)}
                                 >
-                                  자세 보기
+                                  추가
                                 </button>
-                              ) : null}
-                              <button
-                                type="button"
-                                className="ghost-button"
-                                onClick={() => addExercise(exercise)}
-                              >
-                                추가
-                              </button>
-                            </div>
-                          </article>
-                        ))}
-                      </div>
-                    </section>
-                  ))}
-                </div>
-              ) : (
-                <div className="exercise-browser__empty">조건에 맞는 운동이 아직 없습니다.</div>
-              )}
+                              </div>
+                            </article>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="exercise-browser__empty">조건에 맞는 운동이 아직 없습니다.</div>
+                )}
+              </div>
             </div>
-          </div>
+          </details>
 
           <div className="stack-list">
             {items.map((item) => {
@@ -686,16 +678,15 @@ function RoutineEditor({
                         />
                       </label>
                       <label className="field">
-                        <span>목표 속도 (km/h)</span>
+                        <span>목표 페이스 (분/km)</span>
                         <input
                           type="number"
-                          min="0.5"
+                          min="0"
                           step="0.1"
-                          value={paceToSpeedKmh(item.targetPaceMinPerKm) ?? 0}
+                          value={item.targetPaceMinPerKm}
                           onChange={(event) =>
                             updateItem(item.uid, {
-                              targetPaceMinPerKm:
-                                speedToPaceMinPerKm(event.currentTarget.valueAsNumber) ?? 0
+                              targetPaceMinPerKm: event.currentTarget.valueAsNumber || 0
                             })
                           }
                         />
@@ -881,7 +872,7 @@ export function RoutinesPage() {
         }
       >
         <div className="stack-list">
-          <p className="muted-copy">루틴은 저장한 순서대로 돌아가고, 새 주가 시작되면 1번째 루틴부터 다시 시작해요.</p>
+          <p className="muted-copy">루틴은 저장한 순서대로 돌고, 새 주가 시작되면 다시 1번째부터 시작해요.</p>
           {routines.length > 0 ? (
             <div className="stack-list">
               {routines.map((routine, index) => (

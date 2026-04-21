@@ -28,37 +28,37 @@ const titleMap: Array<{ match: string; title: string; subtitle: string }> = [
   {
     match: '/setup',
     title: '오늘운동',
-    subtitle: '나에게 맞는 운동 흐름을 시작해요'
+    subtitle: '내 운동 흐름을 가볍게 시작해요'
   },
   {
     match: '/today/session/',
     title: '오늘 기록',
-    subtitle: '지금 한 운동만 간단히 남겨요'
+    subtitle: '지금 한 운동만 빠르게 남겨요'
   },
   {
     match: '/today',
     title: '오늘',
-    subtitle: '오늘 할 운동과 최근 흐름을 한 번에 봐요'
+    subtitle: '오늘 운동과 최근 흐름을 함께 봐요'
   },
   {
     match: '/routines',
     title: '루틴',
-    subtitle: '웨이트, 맨몸운동, 유산소 루틴을 정리해요'
+    subtitle: '웨이트, 맨몸운동, 유산소를 정리해요'
   },
   {
     match: '/history/',
     title: '상세 기록',
-    subtitle: '지난 운동을 짧고 선명하게 확인해요'
+    subtitle: '지난 운동을 짧게 다시 확인해요'
   },
   {
     match: '/history',
     title: '기록',
-    subtitle: '꾸준함과 변화를 빠르게 확인해요'
+    subtitle: '기록 변화와 건강 흐름을 함께 봐요'
   },
   {
     match: '/settings',
     title: '설정',
-    subtitle: '백업과 보관 상태를 관리해요'
+    subtitle: '백업과 보관 상태를 한 번에 봐요'
   }
 ];
 
@@ -66,7 +66,7 @@ function getHeaderCopy(pathname: string): { title: string; subtitle: string } {
   return (
     titleMap.find((item) => pathname.startsWith(item.match)) ?? {
       title: '오늘운동',
-      subtitle: '운동 흐름과 기록을 한 곳에서 관리해요'
+      subtitle: '운동 흐름과 기록을 한 곳에서 봐요'
     }
   );
 }

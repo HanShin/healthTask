@@ -125,6 +125,10 @@ export function HistoryPage() {
   const healthMeta = healthMetricMeta[healthMetric];
   const hasWorkoutData = workoutSeries.some((point) => (point.value ?? 0) > 0);
   const hasHealthData = healthSeries.some((point) => point.value !== null);
+  const recentHealthEntries = healthEntries.slice(0, 8);
+  const olderHealthEntries = healthEntries.slice(8);
+  const recentSessions = sessions.slice(0, 8);
+  const olderSessions = sessions.slice(8);
   const selectedHealthEntry =
     healthForm.entryId ? healthEntries.find((entry) => entry.id === healthForm.entryId) ?? null : null;
 
@@ -245,7 +249,7 @@ export function HistoryPage() {
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Range" title="추이 범위">
+      <SectionCard title="기간">
         <div className="chip-row">
           {trendRangeOptions.map((option) => (
             <button
@@ -260,7 +264,7 @@ export function HistoryPage() {
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Workout Trend" title="운동 추이">
+      <SectionCard title="운동 추이">
         <div className="chip-row">
           {workoutMetricOptions.map((metric) => (
             <button
@@ -294,7 +298,7 @@ export function HistoryPage() {
         )}
       </SectionCard>
 
-      <SectionCard eyebrow="Health Trend" title="건강 추이">
+      <SectionCard title="건강 추이">
         <div className="chip-row">
           {healthMetricOptions.map((metric) => (
             <button
@@ -329,8 +333,7 @@ export function HistoryPage() {
       </SectionCard>
 
       <SectionCard
-        eyebrow="Health Entry"
-        title="건강 데이터 입력"
+        title="건강 입력"
         action={
           healthForm.entryId ? (
             <button className="ghost-button ghost-button--compact" type="button" onClick={resetHealthForm}>
@@ -420,10 +423,10 @@ export function HistoryPage() {
         {healthError ? <p className="form-feedback form-feedback--error">{healthError}</p> : null}
       </SectionCard>
 
-      <SectionCard eyebrow="Health Archive" title="최근 건강 기록">
+      <SectionCard title="최근 건강">
         {healthEntries.length > 0 ? (
           <div className="stack-list">
-            {healthEntries.slice(0, 8).map((entry) => (
+            {recentHealthEntries.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
@@ -437,6 +440,33 @@ export function HistoryPage() {
                 <span className="metric">수정</span>
               </button>
             ))}
+            {olderHealthEntries.length > 0 ? (
+              <details className="compact-details">
+                <summary className="compact-details__summary">
+                  <div>
+                    <strong>이전 건강 기록 더 보기</strong>
+                    <p>{olderHealthEntries.length}개 기록이 더 있습니다.</p>
+                  </div>
+                  <span>열기</span>
+                </summary>
+                <div className="compact-details__content stack-list">
+                  {olderHealthEntries.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      className={`health-entry-row${healthForm.entryId === entry.id ? ' is-active' : ''}`}
+                      onClick={() => loadHealthEntry(entry)}
+                    >
+                      <div className="health-entry-row__copy">
+                        <strong>{formatKoreanDate(entry.recordDate)}</strong>
+                        <p>{buildHealthEntrySummary(entry)}</p>
+                      </div>
+                      <span className="metric">수정</span>
+                    </button>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
         ) : (
           <EmptyState
@@ -459,7 +489,7 @@ export function HistoryPage() {
       <SectionCard title="세션 기록">
         {sessions.length > 0 ? (
           <div className="stack-list">
-            {sessions.map((session) => (
+            {recentSessions.map((session) => (
               <Link key={session.id} className="history-row" to={`/history/${session.id}`}>
                 <div>
                   <strong>{formatKoreanDate(session.sessionDate)}</strong>
@@ -474,6 +504,34 @@ export function HistoryPage() {
                 </span>
               </Link>
             ))}
+            {olderSessions.length > 0 ? (
+              <details className="compact-details">
+                <summary className="compact-details__summary">
+                  <div>
+                    <strong>이전 세션 더 보기</strong>
+                    <p>{olderSessions.length}개 기록이 더 있습니다.</p>
+                  </div>
+                  <span>열기</span>
+                </summary>
+                <div className="compact-details__content stack-list">
+                  {olderSessions.map((session) => (
+                    <Link key={session.id} className="history-row" to={`/history/${session.id}`}>
+                      <div>
+                        <strong>{formatKoreanDate(session.sessionDate)}</strong>
+                        <p>
+                          {session.items
+                            .map((item) => exerciseMap.get(item.exerciseId) ?? '운동')
+                            .join(' · ')}
+                        </p>
+                      </div>
+                      <span className={`status-pill status-pill--${session.status}`}>
+                        {getSessionStatusLabel(session.status)}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            ) : null}
           </div>
         ) : (
           <EmptyState

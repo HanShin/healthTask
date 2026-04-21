@@ -17,6 +17,14 @@ import {
   type StorageDurabilityStatus
 } from '../../lib/storage';
 
+const workoutTypeLabelMap: Record<string, string> = {
+  weight: '웨이트',
+  bodyweight: '맨몸운동',
+  cardio: '유산소',
+  strength: '웨이트',
+  running: '유산소'
+};
+
 function formatDateTime(value: string | null): string {
   if (!value) {
     return '없음';
@@ -35,6 +43,14 @@ function formatDateTime(value: string | null): string {
     hour: 'numeric',
     minute: '2-digit'
   }).format(date);
+}
+
+function formatWorkoutTypes(value: string[] | undefined): string {
+  if (!value || value.length === 0) {
+    return '-';
+  }
+
+  return value.map((item) => workoutTypeLabelMap[item] ?? item).join(' · ');
 }
 
 function getStorageProtectionCopy(status: StorageDurabilityStatus | null): {
@@ -228,7 +244,7 @@ export function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement('a');
       anchor.href = url;
-      anchor.download = `hansin-workout-log-${exportedAt.slice(0, 10)}.json`;
+      anchor.download = `today-workout-log-${exportedAt.slice(0, 10)}.json`;
       anchor.click();
       markBackupExported(exportedAt);
       setLastBackupAt(exportedAt);
@@ -368,11 +384,11 @@ export function SettingsPage() {
 
   return (
     <div className="page-stack">
-      <SectionCard title="현재 설정">
+      <SectionCard title="운동 기본값">
         <div className="stack-list">
           <div className="detail-row detail-row--wide">
             <span>운동 유형</span>
-            <strong>{profile?.workoutTypes.join(' + ') ?? '-'}</strong>
+            <strong>{formatWorkoutTypes(profile?.workoutTypes)}</strong>
           </div>
           <div className="detail-row detail-row--wide">
             <span>주간 목표</span>
@@ -422,9 +438,7 @@ export function SettingsPage() {
             <span>마지막 JSON 백업</span>
             <strong>{formatDateTime(lastBackupAt)}</strong>
           </div>
-          <p className="lead-copy">
-            이 앱은 브라우저의 IndexedDB에 저장됩니다. 휴대폰 교체나 브라우저 초기화 전에는 JSON 백업을 받아두는 편이 안전합니다.
-          </p>
+          <p className="muted-copy">기기 교체 전에는 JSON 백업을 한 번 저장해 두는 편이 안전합니다.</p>
           <div className="button-row">
             <button className="primary-button" type="button" onClick={handleExport} disabled={isBusy}>
               JSON 내보내기
@@ -448,7 +462,7 @@ export function SettingsPage() {
         </div>
       </SectionCard>
 
-      <SectionCard title="Supabase 백업">
+      <SectionCard title="클라우드 백업">
         <div className="stack-list">
           <div className={`notice-card notice-card--${cloudSetupCopy.tone}`}>
             <strong>{cloudSetupCopy.title}</strong>
@@ -464,13 +478,11 @@ export function SettingsPage() {
               autoComplete="off"
             />
           </label>
-          <p className="muted-copy">
-            이 키는 현재 기기에만 저장됩니다. 클라우드에는 키 자체가 아니라, 이 키로 암호화된 백업 스냅샷만 저장됩니다.
-          </p>
+          <p className="muted-copy">이 키는 현재 기기에만 저장되고, 클라우드에는 암호화된 백업만 올라갑니다.</p>
           {!cloudBackupKey.trim() ? (
             <div className="notice-card notice-card--caution">
               <strong>백업 키가 필요합니다.</strong>
-              <p>저장이나 복원을 누르기 전에, 다른 기기에서도 기억할 수 있는 백업 키를 먼저 입력해 주세요.</p>
+              <p>다른 기기에서도 기억할 수 있는 키를 먼저 입력해 주세요.</p>
             </div>
           ) : null}
           <div className="detail-row detail-row--wide">
@@ -519,17 +531,6 @@ export function SettingsPage() {
               상태 새로고침
             </button>
           </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Vercel 배포 메모">
-        <div className="stack-list">
-          <p className="lead-copy">
-            Vercel Hobby에 GitHub 저장소를 연결하면 정적 배포로 바로 사용할 수 있습니다. 이 프로젝트는 `vercel.json` 리라이트를 포함해서 SPA 라우팅도 이미 맞춰두었습니다.
-          </p>
-          <p className="muted-copy">
-            설치형 앱처럼 쓰려면 모바일 브라우저에서 홈 화면에 추가를 실행하세요.
-          </p>
         </div>
       </SectionCard>
 
