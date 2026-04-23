@@ -1,5 +1,4 @@
 const LAST_BACKUP_AT_KEY = 'health-task:last-backup-at';
-const CLOUD_BACKUP_KEY = 'health-task:cloud-backup-key';
 
 export interface StorageDurabilityStatus {
   supported: boolean;
@@ -62,37 +61,6 @@ export function getLastBackupAt(): string | null {
     return window.localStorage.getItem(LAST_BACKUP_AT_KEY);
   } catch {
     return null;
-  }
-}
-
-export function getCloudBackupKey(): string {
-  if (typeof window === 'undefined') {
-    return '';
-  }
-
-  try {
-    return window.localStorage.getItem(CLOUD_BACKUP_KEY) ?? '';
-  } catch {
-    return '';
-  }
-}
-
-export function setCloudBackupKey(value: string): void {
-  if (typeof window === 'undefined') {
-    return;
-  }
-
-  try {
-    const normalized = value.trim();
-
-    if (!normalized) {
-      window.localStorage.removeItem(CLOUD_BACKUP_KEY);
-      return;
-    }
-
-    window.localStorage.setItem(CLOUD_BACKUP_KEY, normalized);
-  } catch {
-    // Ignore storage write failures and keep cloud backup optional.
   }
 }
 

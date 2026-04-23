@@ -11,7 +11,6 @@
     "test:run": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.99.1",
     "dexie": "latest",
     "dexie-react-hooks": "latest",
     "react": "latest",

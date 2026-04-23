@@ -1,12 +1,9 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStarterTemplateIds } from '../../data/catalog';
-import { restoreFromCloud } from '../../lib/cloudBackup';
 import { db } from '../../lib/db';
 import { useRecommendationTemplates } from '../../lib/recommendedTemplates';
 import { createProfile, importBackup } from '../../lib/repository';
-import { isSupabaseConfigured } from '../../lib/supabase';
-import { getCloudBackupKey, setCloudBackupKey } from '../../lib/storage';
 import type { RoutineDifficulty, RoutineTemplate, WorkoutTypeSelection } from '../../lib/types';
 
 const workoutTypeOptions: Array<{ label: string; value: WorkoutTypeSelection; note: string }> = [
@@ -59,19 +56,10 @@ export function SetupPage() {
   const [starterDifficulty, setStarterDifficulty] = useState<RoutineDifficulty>('beginner');
   const [isSaving, setIsSaving] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
-  const [cloudBackupKey, setCloudBackupKeyState] = useState(() => getCloudBackupKey());
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const supabaseConfigured = isSupabaseConfigured();
-  const {
-    templates,
-    lastSyncedAt,
-    source: templateSource,
-    isRefreshing: isRefreshingTemplates,
-    error: templateError,
-    isRemoteConfigured
-  } = useRecommendationTemplates();
+  const { templates } = useRecommendationTemplates();
   const starterTemplateIds = getStarterTemplateIds({
     workoutTypes,
     workoutsPerWeek,
@@ -103,12 +91,15 @@ export function SetupPage() {
     setIsSaving(true);
 
     try {
-      await createProfile({
-        workoutTypes,
-        workoutsPerWeek,
-        starterMode,
-        starterDifficulty
-      }, templates);
+      await createProfile(
+        {
+          workoutTypes,
+          workoutsPerWeek,
+          starterMode,
+          starterDifficulty
+        },
+        templates
+      );
       navigate('/today', { replace: true });
     } finally {
       setIsSaving(false);
@@ -124,40 +115,6 @@ export function SetupPage() {
     }
 
     setRestoreMessage(`${successMessage} 프로필 정보가 없는 백업이라면 아래 설정을 이어서 완료해 주세요.`);
-  }
-
-  function handleCloudBackupKeyChange(value: string) {
-    setCloudBackupKeyState(value);
-    setCloudBackupKey(value);
-    setRestoreMessage(null);
-    setRestoreError(null);
-  }
-
-  async function handleCloudRestore() {
-    if (!supabaseConfigured) {
-      setRestoreMessage(null);
-      setRestoreError('Supabase 연결 정보가 아직 설정되지 않았습니다.');
-      return;
-    }
-
-    if (!cloudBackupKey.trim()) {
-      setRestoreMessage(null);
-      setRestoreError('클라우드에서 복원하려면 먼저 백업 키를 입력해 주세요.');
-      return;
-    }
-
-    setIsRestoring(true);
-    setRestoreMessage(null);
-    setRestoreError(null);
-
-    try {
-      await restoreFromCloud(cloudBackupKey);
-      await completeRestoreFlow('클라우드 백업을 복원했습니다.');
-    } catch (error) {
-      setRestoreError(error instanceof Error ? error.message : '클라우드 복원에 실패했습니다.');
-    } finally {
-      setIsRestoring(false);
-    }
   }
 
   async function handleJsonImport(event: ChangeEvent<HTMLInputElement>) {
@@ -189,7 +146,7 @@ export function SetupPage() {
           <summary className="compact-details__summary">
             <div>
               <strong>이전 기록 불러오기</strong>
-              <p>JSON 또는 클라우드 백업이 있으면 먼저 복원해요.</p>
+              <p>JSON 백업 파일이 있으면 먼저 복원해요.</p>
             </div>
             <span>열기</span>
           </summary>
@@ -213,24 +170,9 @@ export function SetupPage() {
               onChange={handleJsonImport}
             />
 
-            <label className="field">
-              <span>클라우드 백업 키</span>
-              <input
-                type="password"
-                value={cloudBackupKey}
-                placeholder="기존 기기에서 쓰던 백업 키"
-                onChange={(event) => handleCloudBackupKeyChange(event.target.value)}
-                autoComplete="off"
-              />
-            </label>
-
-            <div className={`notice-card notice-card--${supabaseConfigured ? 'neutral' : 'caution'}`}>
-              <strong>{supabaseConfigured ? '클라우드 복원을 바로 사용할 수 있어요.' : '현재는 JSON 복원만 사용할 수 있어요.'}</strong>
-              <p>
-                {supabaseConfigured
-                  ? '같은 백업 키를 입력하면 기존 운동 기록과 설정을 그대로 가져옵니다.'
-                  : 'Supabase 연결 정보가 준비되면 클라우드 복원도 함께 열립니다.'}
-              </p>
+            <div className="notice-card notice-card--neutral">
+              <strong>운동 기록은 JSON 백업으로 기기 사이를 옮길 수 있어요.</strong>
+              <p>이 앱은 현재 브라우저에 저장되므로, 다른 기기나 브라우저로 옮길 때는 기존 백업 파일을 불러오면 됩니다.</p>
             </div>
 
             {restoreMessage ? (
@@ -246,12 +188,6 @@ export function SetupPage() {
                 <p>{restoreError}</p>
               </div>
             ) : null}
-
-            <div className="button-row">
-              <button className="primary-button" type="button" onClick={handleCloudRestore} disabled={isRestoring}>
-                {isRestoring ? '복원 중...' : '클라우드에서 복원'}
-              </button>
-            </div>
           </div>
         </details>
       </section>
@@ -340,28 +276,9 @@ export function SetupPage() {
             </label>
           </div>
 
-          <div className={`notice-card notice-card--${templateError ? 'caution' : 'neutral'}`}>
-            <strong>
-              {isRemoteConfigured
-                ? isRefreshingTemplates
-                  ? '추천 루틴을 최신 데이터로 확인 중입니다.'
-                  : '추천 루틴은 주기적으로 최신 데이터와 동기화됩니다.'
-                : '현재는 기본 추천 루틴으로 시작합니다.'}
-            </strong>
-            <p>
-              {templateError
-                ? templateError
-                : isRemoteConfigured
-                  ? lastSyncedAt
-                    ? `마지막 갱신: ${new Intl.DateTimeFormat('ko-KR', {
-                        month: 'long',
-                        day: 'numeric',
-                        hour: 'numeric',
-                        minute: '2-digit'
-                      }).format(new Date(lastSyncedAt))} · ${templateSource === 'remote' ? '원격 템플릿 반영됨' : '캐시 템플릿 사용 중'}`
-                    : '앱이 열려 있는 동안 일정 주기로 추천 템플릿을 다시 확인합니다.'
-                  : 'Supabase 추천 템플릿 테이블을 연결하면 추천 루틴도 원격으로 갱신됩니다.'}
-            </p>
+          <div className="notice-card notice-card--neutral">
+            <strong>기본 추천 루틴으로 바로 시작합니다.</strong>
+            <p>앱에 포함된 추천 루틴을 운동 유형과 주간 빈도에 맞춰 바로 세팅해요.</p>
           </div>
 
           {starterMode === 'recommended' ? (

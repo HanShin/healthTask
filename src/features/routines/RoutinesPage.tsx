@@ -140,10 +140,6 @@ function getTemplateDifficulty(template: RoutineTemplate): RoutineDifficulty {
 interface RoutineEditorProps {
   exercises: Exercise[];
   templates: RoutineTemplate[];
-  isRefreshingTemplates: boolean;
-  lastTemplateSyncAt: string | null;
-  templateSyncError: string | null;
-  onRefreshTemplates: () => Promise<void>;
   initialRoutine?: Routine | null;
   sequenceNumber: number;
   onClose: () => void;
@@ -152,10 +148,6 @@ interface RoutineEditorProps {
 function RoutineEditor({
   exercises,
   templates,
-  isRefreshingTemplates,
-  lastTemplateSyncAt,
-  templateSyncError,
-  onRefreshTemplates,
   initialRoutine,
   sequenceNumber,
   onClose
@@ -351,18 +343,7 @@ function RoutineEditor({
                 <section className="template-launcher">
                   <div className="field">
                     <span>추천 템플릿</span>
-                    <p className="muted-copy">
-                      {templateSyncError
-                        ? templateSyncError
-                        : lastTemplateSyncAt
-                          ? `마지막 갱신 ${new Intl.DateTimeFormat('ko-KR', {
-                              month: 'long',
-                              day: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit'
-                            }).format(new Date(lastTemplateSyncAt))}`
-                          : '앱이 열려 있는 동안 템플릿을 주기적으로 다시 확인합니다.'}
-                    </p>
+                    <p className="muted-copy">앱에 포함된 기본 추천 템플릿에서 바로 시작할 수 있어요.</p>
                   </div>
                   <div className="button-row">
                     <button
@@ -371,14 +352,6 @@ function RoutineEditor({
                       onClick={() => setIsTemplatePickerOpen(true)}
                     >
                       추천 템플릿 보기
-                    </button>
-                    <button
-                      className="ghost-button ghost-button--compact"
-                      type="button"
-                      onClick={() => void onRefreshTemplates()}
-                      disabled={isRefreshingTemplates}
-                    >
-                      {isRefreshingTemplates ? '갱신 중...' : '지금 갱신'}
                     </button>
                   </div>
                 </section>
@@ -732,34 +705,13 @@ function RoutineEditor({
                 <div>
                   <h2>추천 템플릿</h2>
                 </div>
-                <div className="button-row">
-                  <button
-                    className="ghost-button ghost-button--compact"
-                    type="button"
-                    onClick={() => void onRefreshTemplates()}
-                    disabled={isRefreshingTemplates}
-                  >
-                    {isRefreshingTemplates ? '갱신 중...' : '새로고침'}
-                  </button>
-                  <button className="ghost-button" type="button" onClick={() => setIsTemplatePickerOpen(false)}>
-                    닫기
-                  </button>
-                </div>
+                <button className="ghost-button" type="button" onClick={() => setIsTemplatePickerOpen(false)}>
+                  닫기
+                </button>
               </div>
 
               <div className="stack-list">
-                <p className="muted-copy">
-                  {templateSyncError
-                    ? `원격 갱신 실패: ${templateSyncError}`
-                    : lastTemplateSyncAt
-                      ? `최신 확인 ${new Intl.DateTimeFormat('ko-KR', {
-                          month: 'long',
-                          day: 'numeric',
-                          hour: 'numeric',
-                          minute: '2-digit'
-                        }).format(new Date(lastTemplateSyncAt))}`
-                      : '기본 추천 템플릿을 표시하고 있습니다.'}
-                </p>
+                <p className="muted-copy">앱에 포함된 기본 추천 템플릿을 표시하고 있습니다.</p>
                 <div className="chip-row">
                   {templateDifficultyOptions.map((option) => (
                     <button
@@ -826,13 +778,7 @@ export function RoutinesPage() {
   const exercises = useLiveQuery(() => db.exercises.toArray(), []) ?? [];
   const routineRecords = useLiveQuery(() => db.routines.toArray(), []) ?? [];
   const routines = getOrderedRoutines(routineRecords);
-  const {
-    templates,
-    isRefreshing: isRefreshingTemplates,
-    lastSyncedAt,
-    error: templateSyncError,
-    refreshTemplates
-  } = useRecommendationTemplates();
+  const { templates } = useRecommendationTemplates();
   const exerciseLookup = new Map(exercises.map((exercise) => [exercise.id, exercise]));
   const [editorTarget, setEditorTarget] = useState<Routine | null | undefined>(undefined);
   const [guideExerciseId, setGuideExerciseId] = useState<string | null>(null);
@@ -942,10 +888,6 @@ export function RoutinesPage() {
         <RoutineEditor
           exercises={exercises}
           templates={templates}
-          isRefreshingTemplates={isRefreshingTemplates}
-          lastTemplateSyncAt={lastSyncedAt}
-          templateSyncError={templateSyncError}
-          onRefreshTemplates={refreshTemplates}
           initialRoutine={editorTarget}
           sequenceNumber={editorSequenceNumber}
           onClose={() => setEditorTarget(undefined)}
