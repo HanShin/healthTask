@@ -1,0 +1,2 @@
+-keepattributes Signature,*Annotation*
+-keep class com.hanshin.healthtask.shared.** { *; }

@@ -1,38 +1,50 @@
 # 작업 진행 로그
 
-## 1) 요구사항 정리
-- [x] 상세 요구사항 정리 및 설계 방향 확정
-- [x] 작업/기술 기록용 Markdown 문서 생성
-- [x] 기능 구현
-- [x] 빌드 검증
-- [ ] 실기기 수동 확인
+## Android 네이티브 전환
 
-## 2) 진행 현황
-| 일시(UTC) | 작업 내용 | 상태 | 비고 |
-|---|---|---|---|
-| 2026-03-11 | 작업 시작, 기록 체계 구성 | 완료 | `TECH_STACK_LOG.md`와 함께 운영 |
-| 2026-03-12 02:20 UTC | React/Vite 기반 PWA 프로젝트 초기화 | 완료 | `package.json`, `vite.config.ts`, `vercel.json` 추가 |
-| 2026-03-12 02:20 UTC | 온보딩, 오늘/루틴/기록/설정 4탭 화면 구현 | 완료 | IndexedDB 연동 포함 |
-| 2026-03-12 02:20 UTC | 루틴 편집, 세션 기록, JSON 백업/복원 구현 | 완료 | `src/features/` 및 `src/lib/repository.ts` |
-| 2026-03-12 02:20 UTC | 프로덕션 빌드 검증 | 완료 | `npm run build` 통과 |
-| 2026-03-12 02:20 UTC | 운동 자세 가이드 이미지와 모달 추가 | 완료 | 운동 기록 화면에서 `자세 보기` 지원 |
-| 2026-03-12 02:20 UTC | 덤벨/케틀벨 운동 카탈로그 및 프리웨이트 템플릿 확장 | 완료 | 루틴 편집기 장비 필터 포함 |
-| 2026-03-12 02:20 UTC | 운동 선택 UI를 부위/장비 카드 브라우저로 개선 | 완료 | 루틴 편집기에서 카드 클릭으로 즉시 추가 |
-| 2026-03-12 02:20 UTC | 자세 가이드에 외부 영상/레퍼런스 링크 추가 | 완료 | YouTube/ExRx 링크와 임베드 지원 |
+- [x] PWA 최종 상태를 `pwa-final-2026-08-21` 태그로 보존
+- [x] `feat/android-native-rewrite` 브랜치 생성
+- [x] Android Studio, SDK Platform 34/36, Platform Tools 설치
+- [x] Kotlin + Compose Material 3 + Navigation 단일 Activity 구조
+- [x] Room 정규화 모델과 DataStore 설정
+- [x] 루틴 CRUD, 순번, 운동 세션, 최근 세트 이어받기, 건강 기록
+- [x] Health Connect Gateway와 Fake 가능 경계
+- [x] 삼성 헬스 원본 읽기, 로컬 운동 요약 쓰기, 실패 재시도
+- [x] 10분 목표 기준, 70% 자동 연결, 중복 목표 방지
+- [x] legacy-v1 가져오기와 schemaVersion 2 내보내기
+- [x] 기존 PWA 소스 제거 및 SVG 가이드 번들
+- [x] 단위 테스트, lint, debug APK, androidTest APK 빌드
+- [ ] 삼성 Android 14+ 실기기 `connectedDebugAndroidTest`
+- [x] 저장소 밖 개인 릴리스 키 생성 및 서명된 release APK 검증
+- [x] Galaxy Watch9 대상 `:wear` Wear OS 앱 모듈
+- [x] Data Layer 다음 루틴 전송과 오프라인 완료 기록 전달
+- [x] 워치 세트·횟수·중량 편집, 일시정지, 진행 상태 복원
+- [x] Health Services 심박·평균 심박·칼로리·거리 측정 서비스
+- [x] 워치 기록의 휴대폰 Room 멱등 가져오기와 Health Connect 전송 대기
+- [x] 휴대폰/워치 release APK 동일 인증서 서명 검증
+- [x] CC0 사람형 아바타 기반 바벨 스쿼트 정면·측면 3D 루프 제작
+- [x] 실제 하이바 스쿼트 정면·측면 레퍼런스로 다리 IK 축, 골반·척추, 바벨 경로와 그립 전면 재제작
+- [x] 향후 모든 3D 운동에 적용할 모션 품질 기준과 스쿼트 그립 정면·사선·후면 기준 이미지 문서화
+- [x] Media3 오프라인 자동 반복과 정면·측면 전환을 운동 가이드에 통합
+- [ ] 서명된 release APK 실기기 설치·업데이트 검증
+- [ ] Galaxy Watch9에서 센서·오프라인·재연결 전달 실기기 검증
 
-## 3) 다음 작업
-- 모바일 실기기에서 PWA 설치와 입력 UX 확인
-- 루틴 추천 로직을 최근 기록 기반으로 더 정교하게 확장
-- 필요 시 클라우드 동기화 계층 추가 검토
+## 검증 기록
 
-## 4) 테스트 기록
-> 실행한 명령과 결과를 아래에 누적합니다.
+2026-08-21:
 
-- `npm install`
-  - 완료
-  - 의존성 설치 성공
-  - `npm audit` 기준 high severity 4건 보고됨. 아직 별도 조치 전
-- `npm run build`
-  - 완료
-  - TypeScript 검사 및 Vite 프로덕션 빌드 성공
-  - PWA 산출물(`dist/sw.js`, `dist/manifest.webmanifest`) 생성 확인
+- `assembleDebug`: 성공
+- `test`: 성공
+- `lintDebug`: 성공(오류 0, 버전/리소스 권고 경고만 존재)
+- `assembleDebugAndroidTest`: 성공
+- `assembleRelease`: 성공, APK Signature Scheme v2 검증 성공
+- 휴대폰·워치 release 인증서 SHA-256 일치 확인
+- 스쿼트 MP4 2개 release APK 리소스 포함 및 Media3 1.11.0 빌드 확인
+- 생성 파일:
+  - `app/build/outputs/apk/debug/app-debug.apk`
+  - `app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk`
+  - `app/build/outputs/apk/release/app-release.apk`
+  - `wear/build/outputs/apk/debug/wear-debug.apk`
+  - `wear/build/outputs/apk/release/wear-release.apk`
+
+실기기 검증에서는 삼성 헬스 양방향 표시, Watch9 단독 기록과 재연결 전송, 워치/삼성 동시 기록 자동 연결, 권한 취소/재허용, 오프라인/재시작, PWA 개수 일치, 동일 서명 업데이트 후 Room 유지 여부를 확인합니다.

@@ -1,0 +1,6 @@
+-keepattributes Signature,*Annotation*
+-keep class com.hanshin.healthtask.data.BackupV2 { *; }
+-keep class com.hanshin.healthtask.data.db.** { *; }
+-keep class com.hanshin.healthtask.domain.** { *; }
+-keep class com.hanshin.healthtask.shared.** { *; }
+-keep class androidx.health.connect.client.records.** { *; }

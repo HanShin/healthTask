@@ -1,69 +1,35 @@
 # Session Handoff
 
-## 기준 일자
-- 2026-03-12
+## 현재 상태
 
-## 이번에 반영된 큰 방향
-- 루틴은 더 이상 요일 기준이 아니라, `일요일~토요일` 한 주 안에서 `이번 주 몇 번째 운동인지` 기준으로 순서대로 실행됩니다.
-- 해당 주에 루틴을 다 못 끝내도 일요일이 되면 다시 1번째 루틴부터 시작합니다.
-- 오늘 운동 화면은 한 번에 한 운동만 펼쳐지고, 세트 입력은 한 줄에서 빠르게 처리하는 방향으로 정리했습니다.
-- 웨이트 운동은 같은 운동의 최근 기록에서 `마지막 완료 세트`를 다음 기본 중량/횟수로 이어받습니다. 완료 체크가 없으면 마지막 세트를 fallback으로 사용합니다.
+`오늘운동`은 PWA가 아닌 Android 네이티브 앱입니다. 기존 웹 버전은 `pwa-final-2026-08-21` 태그에만 남아 있고 현재 브랜치는 `feat/android-native-rewrite`입니다.
 
-## 이번 세션에서 마무리한 기능
-- 루틴 편집/생성 화면의 요일 선택 제거
-- 루틴 순번 기반 실행 로직 적용
-- Dexie 마이그레이션으로 기존 `scheduleDays` 제거
-- 오늘 운동 화면에서:
-  - 운동 카드 아코디언
-  - 세트 수 추가/삭제
-  - 세션 중 운동 추가
-  - 중량/횟수 입력 폭 축소
-- 최근 기록 홈 카드 UI를 `세션 카드형`으로 재구성
-- 상태값 `completed/partial/skipped`를 `완료/일부 완료/미완료`로 통일
-- 상태 배지에서 `일부 완료` 줄바꿈 방지
+핵심 코드는 다음 위치에 있습니다.
 
-## 중요 파일
-- `src/lib/routineSequence.ts`
-  - 주간 루틴 순서 계산
-- `src/lib/date.ts`
-  - 주 시작일을 일요일 기준으로 변경
-- `src/lib/db.ts`
-  - `scheduleDays` 제거용 마이그레이션
-- `src/lib/repository.ts`
-  - 루틴/세션 저장 로직 정리
-- `src/lib/workoutRecord.ts`
-  - 최근 웨이트 기록 carry-over 계산
-- `src/lib/sessionStatus.ts`
-  - 세션 상태 한글 라벨 공통화
-- `src/features/routines/RoutinesPage.tsx`
-  - 요일 선택 제거, 순번형 루틴 편집
-- `src/features/today/TodayPage.tsx`
-  - 오늘 추천, 최근 기록 카드, 상태 표시
-- `src/features/today/SessionPage.tsx`
-  - 세션 입력 UX, 세트 조작, 운동 추가
-- `src/features/history/HistoryPage.tsx`
-  - 회고 기록 상태 라벨 한글화
-- `src/features/history/SessionDetailPage.tsx`
-  - 상세 기록 상태 라벨 한글화
-- `src/styles/app.css`
-  - 루틴/세션/최근 기록 관련 UI 정리
+- `app/src/main/java/com/hanshin/healthtask/data`: Room 저장소, seed, JSON 백업
+- `app/src/main/java/com/hanshin/healthtask/domain`: 목표·순서·중첩·세션 상태 규칙
+- `app/src/main/java/com/hanshin/healthtask/health`: Health Connect 경계와 동기화
+- `app/src/main/java/com/hanshin/healthtask/ui`: Compose 화면과 상태
+- `app/src/test`: 순수 단위 테스트
+- `app/src/androidTest`: Room, legacy import, Health Connect 재시도 테스트
+- `shared`: 휴대폰/워치 Data Layer 프로토콜과 경과 시간 규칙
+- `wear/src/main/java`: Watch9 Compose UI, DataStore, Data Layer, Health Services
+- `app/src/main/res/raw`: 스쿼트 정면·측면 오프라인 3D 모션 MP4
+- `design/motion` 및 `tools/blender`: 최종 Blender 원본과 재생성 스크립트
 
-## 현재 UX 기준 메모
-- `운동 추가`는 현재 세션 기록에만 반영됩니다.
-  - 루틴 템플릿 자체에 영구 추가하는 흐름은 아직 별도 구현이 필요합니다.
-- 세션에서 추가한 운동은 `제외` 버튼으로 다시 뺄 수 있습니다.
-- 최근 기록 카드는 각 세션에서 대표 운동 2개만 먼저 보여주고, 나머지는 `+N개 운동 더 보기`로 압축합니다.
+## 남은 실환경 작업
 
-## 다음 세션에서 바로 이어가기 좋은 작업
-- 루틴 편집 화면에서 운동 순서 drag/drop 또는 위/아래 이동 추가
-- 루틴 편집 화면에서 운동 영구 추가/삭제 UX 보강
-- 최근 기록 카드에 `+2.5kg`, `+1회` 같은 변화 배지 추가
-- 실기기에서 모바일 입력 UX와 카드 밀도 최종 점검
+1. USB 디버깅을 켠 Android 14+ 삼성 휴대폰을 연결합니다.
+2. Galaxy Watch9을 Wi-Fi 디버깅으로 페어링합니다.
+3. `./gradlew connectedDebugAndroidTest`를 실행합니다.
+4. 휴대폰과 워치에 각각 `app-release.apk`, `wear-release.apk`를 설치합니다.
+5. Watch9에서 활동 인식·심박·알림 권한을 허용하고 센서 측정을 확인합니다.
+6. 휴대폰 연결을 끊은 채 운동을 완료한 뒤 재연결해 Room 전달과 Health Connect 쓰기를 확인합니다.
+7. 기존 PWA JSON 개수와 동일 서명 업데이트 후 Room 유지 여부를 확인합니다.
+8. `~/.android/healthtask-release.jks`와 `~/.gradle/healthtask-signing.properties`를 안전한 별도 위치에 백업합니다.
 
-## 검증 기록
-- `./node_modules/.bin/tsc -b`
-- `./node_modules/.bin/vite build --configLoader runner`
+거리와 칼로리는 현재 합의한 제한 권한에 포함되지 않으므로 Health Connect 외부 기록에서 값이 없을 수 있습니다. 앱은 해당 값을 nullable로 유지하며 시간과 원본 앱 표시는 항상 제공합니다.
 
-## 참고
-- 현재 변경은 `/Users/shin-han/.codex/worktrees/7fb9/healthTask` 기준으로 정리되어 있습니다.
-- 실제 서비스 폴더 `/Users/shin-han/workspace/healthTask` 에도 주요 변경 파일은 동기화해둔 상태입니다.
+스쿼트 3D 가이드는 MakeHuman Community의 CC0 베이스 메시·시스템 자산과 MPFB 2.0.17로 생성했습니다. 실제 하이바 스쿼트 정면·측면 Shorts를 자세 레퍼런스로만 사용해 MPFB 다리 IK 축(-90도), 고정된 발, 무릎 트래킹, 골반·척추 회전, 바벨 수직 경로, 손 그립을 재제작했습니다. 앱에는 자체 렌더된 MP4만 포함되며, Media3 1.11.0이 무음 반복 재생합니다. 다른 운동은 기존 SVG 가이드를 유지합니다.
+
+새 3D 운동을 제작하거나 기존 모션을 수정할 때는 `docs/MOTION_QUALITY_STANDARD.md`를 완료 조건으로 사용합니다. 특히 장비를 잡는 손은 주먹 포즈로 대체하지 않고 손가락 뿌리 축을 장비와 정렬한 뒤 관절별 접촉을 계산하며, 정면·사선·후면 근접 렌더까지 통과해야 합니다. 현재 스쿼트의 `design/motion/previews/human_squat_grip_{front,angle,rear}.png`가 최소 시각 품질 기준입니다.
