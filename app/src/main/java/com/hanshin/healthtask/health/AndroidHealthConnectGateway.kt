@@ -8,20 +8,26 @@ import androidx.health.connect.client.changes.DeletionChange
 import androidx.health.connect.client.changes.UpsertionChange
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.BodyFatRecord
+import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.request.ChangesTokenRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import com.hanshin.healthtask.domain.ExerciseCategory
 import com.hanshin.healthtask.domain.HealthMetricType
+import com.hanshin.healthtask.domain.NIKE_RUN_CLUB_PACKAGE
 import com.hanshin.healthtask.domain.SAMSUNG_HEALTH_PACKAGE
-import com.hanshin.healthtask.domain.SamsungHealthMeasurement
-import com.hanshin.healthtask.domain.SamsungWorkout
+import com.hanshin.healthtask.domain.ExternalHealthMeasurement
+import com.hanshin.healthtask.domain.ExternalWorkout
+import com.hanshin.healthtask.domain.WorkoutSource
 import com.hanshin.healthtask.domain.WorkoutSummary
 import java.time.Instant
+import java.time.Duration
 import java.time.ZoneId
 
 class AndroidHealthConnectGateway(private val context: Context) : HealthConnectGateway {
@@ -32,6 +38,8 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         HealthPermission.getWritePermission(ExerciseSessionRecord::class),
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(BodyFatRecord::class),
+        HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
         HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY,
     )
 
@@ -44,18 +52,19 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         else HealthConnectStatus.PERMISSIONS_REQUIRED
     }
 
-    override suspend fun readSamsungData(changesToken: String?): HealthConnectSnapshot {
+    override suspend fun readHealthConnectData(changesToken: String?): HealthConnectSnapshot {
         check(status() == HealthConnectStatus.CONNECTED) { "Health Connect 권한이 필요합니다." }
-        val origin = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE))
-        if (changesToken != null) return readChanges(changesToken)
+        val origins = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE), DataOrigin(NIKE_RUN_CLUB_PACKAGE))
+        if (changesToken != null) return readChanges(changesToken).withRecentNikeRuns()
         val nextToken = client.getChangesToken(ChangesTokenRequest(
             recordTypes = setOf(ExerciseSessionRecord::class, WeightRecord::class, BodyFatRecord::class),
-            dataOriginFilters = origin,
+            dataOriginFilters = origins,
         ))
         val range = TimeRangeFilter.between(Instant.EPOCH, Instant.now().plusSeconds(1))
-        val workouts = readAll(ExerciseSessionRecord::class, range, origin).map(::toWorkout)
-        val weights = readAll(WeightRecord::class, range, origin).map(::toMeasurement)
-        val bodyFat = readAll(BodyFatRecord::class, range, origin).map(::toMeasurement)
+        val workouts = readAll(ExerciseSessionRecord::class, range, origins).map { toWorkout(it) }
+        val samsungOrigin = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE))
+        val weights = readAll(WeightRecord::class, range, samsungOrigin).map(::toMeasurement)
+        val bodyFat = readAll(BodyFatRecord::class, range, samsungOrigin).map(::toMeasurement)
         return HealthConnectSnapshot(workouts, weights + bodyFat, nextChangesToken = nextToken)
     }
 
@@ -106,14 +115,14 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
     }
 
     private suspend fun readChanges(initialToken: String): HealthConnectSnapshot {
-        val workouts = mutableListOf<SamsungWorkout>()
-        val measurements = mutableListOf<SamsungHealthMeasurement>()
+        val workouts = mutableListOf<ExternalWorkout>()
+        val measurements = mutableListOf<ExternalHealthMeasurement>()
         val deleted = mutableSetOf<String>()
         var token = initialToken
         var hasMore: Boolean
         do {
             val response = client.getChanges(token)
-            if (response.changesTokenExpired) return readSamsungData(null)
+            if (response.changesTokenExpired) return readHealthConnectData(null)
             response.changes.forEach { change ->
                 when (change) {
                     is DeletionChange -> deleted += change.recordId
@@ -130,26 +139,59 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         return HealthConnectSnapshot(workouts, measurements, deleted, token)
     }
 
-    private fun toWorkout(record: ExerciseSessionRecord) = SamsungWorkout(
-        recordId = record.metadata.id,
-        title = record.title?.takeIf { it.isNotBlank() } ?: exerciseTitle(record.exerciseType),
-        category = exerciseCategory(record.exerciseType),
-        start = record.startTime,
-        end = record.endTime,
-    )
+    private suspend fun HealthConnectSnapshot.withRecentNikeRuns(): HealthConnectSnapshot {
+        val range = TimeRangeFilter.between(Instant.now().minus(Duration.ofDays(7)), Instant.now().plusSeconds(1))
+        val recent = readAll(
+            ExerciseSessionRecord::class,
+            range,
+            setOf(DataOrigin(NIKE_RUN_CLUB_PACKAGE)),
+        ).map { toWorkout(it) }
+        return copy(workouts = (workouts + recent).distinctBy { it.recordId })
+    }
 
-    private fun toMeasurement(record: WeightRecord) = SamsungHealthMeasurement(
+    private suspend fun toWorkout(record: ExerciseSessionRecord): ExternalWorkout {
+        val packageName = record.metadata.dataOrigin.packageName
+        val details = if (packageName == NIKE_RUN_CLUB_PACKAGE) readNikeDetails(record) else WorkoutDetails()
+        return ExternalWorkout(
+            recordId = record.metadata.id,
+            title = record.title?.takeIf { it.isNotBlank() }
+                ?: if (packageName == NIKE_RUN_CLUB_PACKAGE) "Nike Run Club 달리기" else exerciseTitle(record.exerciseType),
+            category = exerciseCategory(record.exerciseType),
+            start = record.startTime,
+            end = record.endTime,
+            distanceKm = details.distanceKm,
+            caloriesKcal = details.caloriesKcal,
+            source = if (packageName == NIKE_RUN_CLUB_PACKAGE) WorkoutSource.NIKE_RUN_CLUB else WorkoutSource.SAMSUNG_HEALTH,
+            sourcePackage = packageName,
+        )
+    }
+
+    private suspend fun readNikeDetails(record: ExerciseSessionRecord): WorkoutDetails {
+        val result = client.aggregate(AggregateRequest(
+            metrics = setOf(DistanceRecord.DISTANCE_TOTAL, TotalCaloriesBurnedRecord.ENERGY_TOTAL),
+            timeRangeFilter = TimeRangeFilter.between(record.startTime, record.endTime),
+            dataOriginFilter = setOf(DataOrigin(NIKE_RUN_CLUB_PACKAGE)),
+        ))
+        return WorkoutDetails(
+            distanceKm = result[DistanceRecord.DISTANCE_TOTAL]?.inKilometers?.takeIf { it > 0.0 },
+            caloriesKcal = result[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories?.takeIf { it > 0.0 },
+        )
+    }
+
+    private fun toMeasurement(record: WeightRecord) = ExternalHealthMeasurement(
         recordId = record.metadata.id,
         type = HealthMetricType.WEIGHT_KG,
         value = record.weight.inKilograms,
         measuredAt = record.time,
+        sourcePackage = record.metadata.dataOrigin.packageName,
     )
 
-    private fun toMeasurement(record: BodyFatRecord) = SamsungHealthMeasurement(
+    private fun toMeasurement(record: BodyFatRecord) = ExternalHealthMeasurement(
         recordId = record.metadata.id,
         type = HealthMetricType.BODY_FAT_PERCENT,
         value = record.percentage.value,
         measuredAt = record.time,
+        sourcePackage = record.metadata.dataOrigin.packageName,
     )
 
     private fun exerciseCategory(type: Int): ExerciseCategory = when (type) {
@@ -165,4 +207,9 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> "맨몸운동"
         else -> "근력 운동"
     }
+
+    private data class WorkoutDetails(
+        val distanceKm: Double? = null,
+        val caloriesKcal: Double? = null,
+    )
 }

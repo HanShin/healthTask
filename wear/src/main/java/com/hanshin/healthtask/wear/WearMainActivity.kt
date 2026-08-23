@@ -41,6 +41,7 @@ import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutineExercise
 import com.hanshin.healthtask.shared.WearRoutinePayload
 import com.hanshin.healthtask.shared.elapsedMillis
+import com.hanshin.healthtask.shared.remainingRestSeconds
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -73,12 +74,18 @@ private fun WearWorkoutApp(viewModel: WearMainViewModel) {
     }
 
     MaterialTheme {
+        val effectiveRestSeconds = maxOf(
+            state.restRemainingSeconds,
+            remainingRestSeconds(state.active?.restEndsAt),
+        )
         Column(
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 14.dp, vertical = 8.dp).verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            if (state.active != null) {
+            if (state.active != null && effectiveRestSeconds > 0) {
+                WearRestTimerScreen(effectiveRestSeconds, viewModel)
+            } else if (state.active != null) {
                 ActiveWorkoutScreen(state, viewModel)
             } else {
                 RoutineScreen(state.routine, onStart = {
@@ -99,6 +106,19 @@ private fun WearWorkoutApp(viewModel: WearMainViewModel) {
             }
         }
     }
+}
+
+@Composable
+private fun WearRestTimerScreen(remainingSeconds: Int, viewModel: WearMainViewModel) {
+    Spacer(Modifier.height(12.dp))
+    Text("휴식 중", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(8.dp))
+    Text(formatCountdown(remainingSeconds), style = MaterialTheme.typography.displayLarge, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(8.dp))
+    Text("휴식이 끝날 때까지\n운동 입력이 잠깁니다.", textAlign = TextAlign.Center)
+    Spacer(Modifier.height(12.dp))
+    Button(onClick = { viewModel.addRestTime() }, modifier = Modifier.fillMaxWidth()) { Text("+30초") }
+    Button(onClick = viewModel::skipRestTimer, modifier = Modifier.fillMaxWidth()) { Text("휴식 종료") }
 }
 
 @Composable
@@ -160,19 +180,34 @@ private fun ExerciseEditor(exercise: WearRoutineExercise, viewModel: WearMainVie
         Text("목표 ${formatNumber(exercise.targetDurationMin)}분 · ${formatNumber(exercise.targetDistanceKm)}km")
         return
     }
-    exercise.sets.forEach { set ->
-        Button(onClick = { viewModel.toggleSet(set.order) }, modifier = Modifier.fillMaxWidth()) {
-            Text("${if (set.completed) "✓" else "○"} ${set.order}세트 · ${set.reps ?: 0}회 · ${formatNumber(set.weightKg)}kg")
+    val sets = exercise.sets.sortedBy { it.order }
+    val completed = sets.filter { it.completed }
+    val next = sets.firstOrNull { !it.completed }
+    Text("목표 ${sets.size}세트 · 완료 ${completed.size}", style = MaterialTheme.typography.bodySmall)
+    if (next != null) {
+        Text("다음 ${next.order}/${sets.size}세트", style = MaterialTheme.typography.titleSmall)
+        Text("${next.reps ?: 0}회 · ${formatNumber(next.weightKg)}kg")
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Button(onClick = { viewModel.adjustReps(-1) }, modifier = Modifier.weight(1f)) { Text("횟수−") }
+            Button(onClick = { viewModel.adjustReps(1) }, modifier = Modifier.weight(1f)) { Text("횟수+") }
         }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Button(onClick = { viewModel.adjustWeight(-0.5) }, modifier = Modifier.weight(1f)) { Text("중량−") }
+            Button(onClick = { viewModel.adjustWeight(0.5) }, modifier = Modifier.weight(1f)) { Text("중량+") }
+        }
+        Button(onClick = { viewModel.toggleSet(next.order) }, modifier = Modifier.fillMaxWidth()) {
+            Text("${next.order}세트 기록")
+        }
+    } else {
+        Text("목표 세트를 모두 기록했어요.", color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
     }
-    Text("다음 미완료 세트 조절", style = MaterialTheme.typography.labelSmall)
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(onClick = { viewModel.adjustReps(-1) }, modifier = Modifier.weight(1f)) { Text("횟수−") }
-        Button(onClick = { viewModel.adjustReps(1) }, modifier = Modifier.weight(1f)) { Text("횟수+") }
-    }
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Button(onClick = { viewModel.adjustWeight(-0.5) }, modifier = Modifier.weight(1f)) { Text("중량−") }
-        Button(onClick = { viewModel.adjustWeight(0.5) }, modifier = Modifier.weight(1f)) { Text("중량+") }
+    if (completed.isNotEmpty()) {
+        Text("완료 기록", style = MaterialTheme.typography.labelSmall)
+        completed.forEach { set ->
+            Button(onClick = { viewModel.toggleSet(set.order) }, modifier = Modifier.fillMaxWidth()) {
+                Text("${set.order}세트 · ${set.reps ?: 0}회 · ${formatNumber(set.weightKg)}kg · 수정")
+            }
+        }
     }
 }
 
@@ -181,3 +216,5 @@ private fun formatNumber(value: Double?): String = when {
     value % 1.0 == 0.0 -> value.toInt().toString()
     else -> "%.1f".format(value)
 }
+
+private fun formatCountdown(seconds: Int): String = "%02d:%02d".format(seconds.coerceAtLeast(0) / 60, seconds.coerceAtLeast(0) % 60)

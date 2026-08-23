@@ -99,7 +99,7 @@ fun weeklyGoalCount(
         }
         when (session.source) {
             WorkoutSource.LOCAL, WorkoutSource.LEGACY_IMPORT -> true
-            WorkoutSource.SAMSUNG_HEALTH -> {
+            WorkoutSource.SAMSUNG_HEALTH, WorkoutSource.GOOGLE_FIT, WorkoutSource.NIKE_RUN_CLUB -> {
                 if (session.id in linkedExternalIds) false
                 else {
                     val end = session.endedAt ?: return@count false
@@ -114,7 +114,7 @@ fun streakDays(sessions: List<WorkoutSessionEntity>, links: List<SamsungWorkoutL
     val linkedExternalIds = links.mapTo(mutableSetOf()) { it.samsungSessionId }
     val eligibleDates = sessions.filter { session ->
         session.status != WorkoutStatus.SKIPPED && session.status != WorkoutStatus.ACTIVE &&
-            (session.source != WorkoutSource.SAMSUNG_HEALTH || (session.id !in linkedExternalIds && session.endedAt?.let {
+            (!session.source.isExternal() || (session.id !in linkedExternalIds && session.endedAt?.let {
                 java.time.Duration.between(Instant.ofEpochMilli(session.startedAt), Instant.ofEpochMilli(it)).toMinutes() >= MIN_EXTERNAL_WORKOUT_MINUTES
             } == true))
     }.map { LocalDate.parse(it.sessionDate) }.distinct().sortedDescending()

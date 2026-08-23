@@ -22,6 +22,7 @@ import com.hanshin.healthtask.domain.RecordMode
 import com.hanshin.healthtask.domain.SyncStatus
 import com.hanshin.healthtask.domain.WorkoutSource
 import com.hanshin.healthtask.domain.WorkoutStatus
+import com.hanshin.healthtask.domain.isExternal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
@@ -53,7 +54,7 @@ class BackupCodec(private val database: HealthTaskDatabase) {
     suspend fun export(): String {
         val dao = database.dao()
         val routines = dao.getRoutines()
-        val sessions = dao.getSessions().filter { it.session.source != WorkoutSource.SAMSUNG_HEALTH }
+        val sessions = dao.getSessions().filterNot { it.session.source.isExternal() }
         val localIds = sessions.mapTo(mutableSetOf()) { it.session.id }
         val payload = BackupV2(
             profile = dao.getProfile(),
@@ -63,7 +64,7 @@ class BackupCodec(private val database: HealthTaskDatabase) {
             sessions = sessions.map { it.session },
             workoutItems = sessions.flatMap { it.items }.map { it.item },
             setRecords = sessions.flatMap { it.items }.flatMap { it.sets },
-            healthMeasurements = dao.getHealthMeasurements().filter { it.source != WorkoutSource.SAMSUNG_HEALTH },
+            healthMeasurements = dao.getHealthMeasurements().filterNot { it.source.isExternal() },
             samsungWorkoutLinks = dao.getWorkoutLinks().filter { it.localSessionId in localIds },
         )
         return gson.toJson(payload)

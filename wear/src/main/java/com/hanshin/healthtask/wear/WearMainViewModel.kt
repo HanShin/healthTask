@@ -1,23 +1,31 @@
 package com.hanshin.healthtask.wear
 
 import android.app.Application
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.hanshin.healthtask.shared.DEFAULT_REST_TIMER_SECONDS
 import com.hanshin.healthtask.shared.WearActiveSession
 import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutinePayload
 import com.hanshin.healthtask.shared.WearRoutineSet
 import com.hanshin.healthtask.shared.elapsedMillis
+import com.hanshin.healthtask.shared.remainingRestSeconds
 import com.hanshin.healthtask.wear.health.WearExerciseService
 import com.hanshin.healthtask.wear.health.WearMetrics
 import com.hanshin.healthtask.wear.health.WearMetricsRepository
 import java.util.UUID
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -25,6 +33,7 @@ data class WearUiState(
     val routine: WearRoutinePayload? = null,
     val active: WearActiveSession? = null,
     val metrics: WearMetrics = WearMetrics(),
+    val restRemainingSeconds: Int = 0,
     val message: String? = null,
 ) {
     val currentExercise get() = active?.exercises?.getOrNull(active.currentExerciseIndex)
@@ -32,21 +41,43 @@ data class WearUiState(
 
 class WearMainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as WatchApplication
+    private val restRemainingSeconds = MutableStateFlow(0)
     private val message = MutableStateFlow<String?>(null)
 
     val state: StateFlow<WearUiState> = combine(
         app.store.routine,
         app.store.activeSession,
         WearMetricsRepository.metrics,
+        restRemainingSeconds,
         message,
-    ) { routine, active, metrics, currentMessage ->
-        WearUiState(routine, active, metrics, currentMessage)
+    ) { routine, active, metrics, restRemaining, currentMessage ->
+        WearUiState(routine, active, metrics, restRemaining, currentMessage)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WearUiState())
 
     init {
         viewModelScope.launch {
             runCatching { app.dataGateway.readLatestRoutine() }
                 .getOrNull()?.let { app.store.saveRoutine(it) }
+        }
+        viewModelScope.launch {
+            app.store.activeSession.collectLatest { active ->
+                val restEndsAt = active?.restEndsAt
+                if (active == null || restEndsAt == null) {
+                    restRemainingSeconds.value = 0
+                    return@collectLatest
+                }
+                while (true) {
+                    val remaining = remainingRestSeconds(restEndsAt)
+                    restRemainingSeconds.value = remaining
+                    if (remaining <= 0) {
+                        signalRestComplete()
+                        message.value = "휴식 끝! 다음 세트를 시작하세요."
+                        app.store.saveActiveSession(active.copy(restEndsAt = null))
+                        return@collectLatest
+                    }
+                    delay(250L)
+                }
+            }
         }
     }
 
@@ -76,13 +107,32 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun toggleSet(order: Int) = updateActive { active ->
-        active.updateCurrentExercise { exercise ->
-            exercise.copy(sets = exercise.sets.map { set ->
-                if (set.order == order) set.copy(completed = !set.completed) else set
+    fun toggleSet(order: Int) = viewModelScope.launch {
+        val active = state.value.active ?: return@launch
+        val set = active.exercises.getOrNull(active.currentExerciseIndex)
+            ?.sets?.firstOrNull { it.order == order } ?: return@launch
+        val completing = !set.completed
+        val updated = active.updateCurrentExercise { exercise ->
+            exercise.copy(sets = exercise.sets.map { candidate ->
+                if (candidate.order == order) candidate.copy(completed = completing) else candidate
             })
+        }.let { session ->
+            if (!completing) session
+            else {
+                val configuredSeconds = active.routine.restTimerSeconds
+                    .takeIf { it > 0 } ?: DEFAULT_REST_TIMER_SECONDS
+                session.copy(restEndsAt = System.currentTimeMillis() + configuredSeconds * 1_000L)
+            }
         }
+        app.store.saveActiveSession(updated)
     }
+
+    fun addRestTime(seconds: Int = 30) = updateActive { active ->
+        val currentEnd = active.restEndsAt ?: return@updateActive active
+        active.copy(restEndsAt = maxOf(currentEnd, System.currentTimeMillis()) + seconds * 1_000L)
+    }
+
+    fun skipRestTimer() = updateActive { it.copy(restEndsAt = null) }
 
     fun adjustReps(delta: Int) = updateFocusedSet { set ->
         set.copy(reps = ((set.reps ?: 0) + delta).coerceAtLeast(0))
@@ -159,6 +209,16 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun consumeMessage() { message.value = null }
+
+    private fun signalRestComplete() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            app.getSystemService(VibratorManager::class.java)?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            app.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
+        }
+        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 250L, 150L, 350L), -1))
+    }
 
     private fun updateFocusedSet(transform: (WearRoutineSet) -> WearRoutineSet) = updateActive { active ->
         active.updateCurrentExercise { exercise ->

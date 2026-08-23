@@ -472,7 +472,7 @@ def render_preview(cameras, output_dir):
     scene = bpy.context.scene
     preview_dir = os.path.abspath(os.path.join(os.path.dirname(output_dir), "..", "..", "..", "..", "design", "motion", "previews"))
     os.makedirs(preview_dir, exist_ok=True)
-    for frame, suffix in ((1, "top"), (48, "mid"), (76, "bottom")):
+    for frame, suffix in ((1, "top"), (61, "mid"), (121, "bottom")):
         scene.frame_set(frame)
         for name, camera in cameras.items():
             scene.camera = camera
@@ -512,8 +512,8 @@ def render_ik_tests(rig, cameras, output_dir):
     for left_degrees, right_degrees in ((0, 0), (90, 90), (-90, -90), (90, -90), (-90, 90), (180, 180)):
         rig.pose.bones["calf_l"].constraints["IK"].pole_angle = math.radians(left_degrees)
         rig.pose.bones["calf_r"].constraints["IK"].pole_angle = math.radians(right_degrees)
-        scene.frame_set(75)
-        scene.frame_set(76)
+        scene.frame_set(120)
+        scene.frame_set(121)
         bpy.context.view_layer.update()
         scene.render.image_settings.file_format = "PNG"
         scene.render.filepath = os.path.join(test_dir, f"legs_l{left_degrees}_r{right_degrees}.png")
@@ -571,8 +571,8 @@ def render_leg_tests(rig, cameras, output_dir):
     for degrees in (-135, -90, -45, 0, 45, 90, 135, 180):
         rig.pose.bones["calf_l"].constraints["IK"].pole_angle = math.radians(degrees)
         rig.pose.bones["calf_r"].constraints["IK"].pole_angle = math.radians(degrees)
-        scene.frame_set(75)
-        scene.frame_set(76)
+        scene.frame_set(120)
+        scene.frame_set(121)
         bpy.context.view_layer.update()
         scene.render.filepath = os.path.join(test_dir, f"legs_side_{degrees:+04d}.png")
         bpy.ops.render.render(write_still=True)

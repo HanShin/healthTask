@@ -21,3 +21,9 @@ coverage/
 *.tsbuildinfo
 vite.config.js
 vite.config.d.ts
+
+# Blender motion-pose diagnostics (approved previews are tracked separately).
+design/motion/previews/human_hammer_curl_*_contact.png
+design/motion/previews/human_hammer_curl_*_contact_sheet.png
+design/motion/previews/human_hammer_curl_thumb*.png
+design/motion/previews/human_hammer_curl_right_thumb_*.png

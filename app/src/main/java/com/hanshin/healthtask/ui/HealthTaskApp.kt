@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -24,6 +25,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.DirectionsRun
+import androidx.compose.material.icons.automirrored.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.AddCircle
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
@@ -37,6 +40,9 @@ import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.LibraryAdd
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Rowing
+import androidx.compose.material.icons.rounded.SelfImprovement
+import androidx.compose.material.icons.rounded.AccessibilityNew
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material.icons.rounded.TipsAndUpdates
 import androidx.compose.material.icons.rounded.Tune
@@ -62,6 +68,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -78,12 +85,15 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.health.connect.client.PermissionController
 import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
@@ -108,8 +118,10 @@ import com.hanshin.healthtask.data.db.RoutineWithItems
 import com.hanshin.healthtask.data.db.WorkoutItemWithSets
 import com.hanshin.healthtask.data.db.WorkoutSessionWithItems
 import com.hanshin.healthtask.domain.HealthMetricType
+import com.hanshin.healthtask.domain.ExerciseCategory
 import com.hanshin.healthtask.domain.RecordMode
 import com.hanshin.healthtask.domain.WorkoutSource
+import com.hanshin.healthtask.domain.isExternal
 import com.hanshin.healthtask.health.HealthConnectStatus
 import java.time.Duration
 import java.time.Instant
@@ -212,6 +224,62 @@ private fun MainScaffold(state: MainUiState, vm: MainViewModel) {
             composable("settings") { SettingsPage(state, vm) }
         }
     }
+    if (state.restTimer.isRunning) {
+        FullScreenRestTimerDialog(state.restTimer, vm)
+    }
+}
+
+@Composable
+private fun FullScreenRestTimerDialog(timer: RestTimerUiState, vm: MainViewModel) {
+    Dialog(
+        onDismissRequest = {},
+        properties = DialogProperties(
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize().testTag("rest-timer-modal"),
+            color = MaterialTheme.colorScheme.tertiaryContainer,
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().padding(28.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("휴식 중", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    formatCountdown(timer.remainingSeconds),
+                    style = MaterialTheme.typography.displayLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+                Spacer(Modifier.height(20.dp))
+                LinearProgressIndicator(
+                    progress = { timer.remainingSeconds.toFloat() / timer.totalSeconds.coerceAtLeast(1) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "휴식을 종료하거나 시간이 끝날 때까지 운동 입력이 잠깁니다.",
+                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Spacer(Modifier.height(28.dp))
+                OutlinedButton(onClick = { vm.addRestTime() }, modifier = Modifier.fillMaxWidth()) {
+                    Text("+30초")
+                }
+                Button(
+                    onClick = vm::skipRestTimer,
+                    modifier = Modifier.fillMaxWidth().testTag("end-rest-timer"),
+                ) {
+                    Text("휴식 종료")
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -236,7 +304,7 @@ private fun TodayPage(state: MainUiState, vm: MainViewModel) {
         val active = state.activeSession
         if (active != null) {
             item { Text("진행 중인 운동", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
-            item { ActiveSessionCard(active, vm) }
+            item { ActiveSessionCard(active, state.restTimerSeconds, vm) }
         } else {
             item { Text("다음 루틴", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold) }
             item {
@@ -246,7 +314,16 @@ private fun TodayPage(state: MainUiState, vm: MainViewModel) {
                         Text("먼저 루틴을 만들어 주세요.")
                     } else {
                         Text(routine.routine.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                        Text(routine.items.sortedBy { it.orderIndex }.joinToString(" · ") { item -> state.exercises.firstOrNull { it.id == item.exerciseId }?.name ?: item.exerciseId })
+                        Spacer(Modifier.height(8.dp))
+                        routine.items.sortedBy { it.orderIndex }.forEach { item ->
+                            val exercise = state.exercises.firstOrNull { it.id == item.exerciseId }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ExerciseIconBadge(item.exerciseId, item.category, size = 30.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(exercise?.name ?: item.exerciseId)
+                            }
+                            Spacer(Modifier.height(5.dp))
+                        }
                         Spacer(Modifier.height(12.dp))
                         Button(onClick = { vm.startSession(routine.routine.id) }, modifier = Modifier.fillMaxWidth()) {
                             Icon(Icons.Rounded.PlayArrow, null)
@@ -257,22 +334,31 @@ private fun TodayPage(state: MainUiState, vm: MainViewModel) {
                 }
             }
         }
-        val samsung = state.sessions.firstOrNull { it.session.source == WorkoutSource.SAMSUNG_HEALTH }
-        if (samsung != null) item {
+        val external = state.sessions.firstOrNull { it.session.source.isExternal() }
+        if (external != null) item {
             AppCard {
-                Text("최근 삼성 헬스", fontWeight = FontWeight.Bold)
-                Text("${samsung.session.title} · ${durationText(samsung)}")
-                Text(samsung.session.sessionDate, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("최근 외부 운동 · ${sourceLabel(external.session.source)}", fontWeight = FontWeight.Bold)
+                Text("${external.session.title} · ${durationText(external)}")
+                Text(external.session.sessionDate, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
 @Composable
-private fun ActiveSessionCard(session: WorkoutSessionWithItems, vm: MainViewModel) {
+private fun ActiveSessionCard(
+    session: WorkoutSessionWithItems,
+    configuredRestSeconds: Int,
+    vm: MainViewModel,
+) {
     AppCard {
         Text(session.session.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         Text("시작 ${formatTime(session.session.startedAt)}")
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "세트를 기록하면 ${formatCountdown(configuredRestSeconds)} 휴식 화면이 자동으로 열립니다.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(12.dp))
         session.items.sortedBy { it.item.orderIndex }.forEach { item ->
             WorkoutInput(item, vm)
@@ -290,19 +376,16 @@ private fun ActiveSessionCard(session: WorkoutSessionWithItems, vm: MainViewMode
 private fun WorkoutInput(full: WorkoutItemWithSets, vm: MainViewModel) {
     val context = LocalContext.current
     var guide by remember { mutableStateOf(false) }
-    TextButton(onClick = { guide = true }, contentPadding = PaddingValues(0.dp)) {
-        Text(full.item.exerciseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-        Icon(Icons.Rounded.TipsAndUpdates, "운동 가이드", Modifier.padding(start = 5.dp).size(18.dp))
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        ExerciseIconBadge(full.item.exerciseId, full.item.category)
+        Spacer(Modifier.width(8.dp))
+        TextButton(onClick = { guide = true }, contentPadding = PaddingValues(0.dp)) {
+            Text(full.item.exerciseName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Icon(Icons.Rounded.TipsAndUpdates, "운동 가이드", Modifier.padding(start = 5.dp).size(18.dp))
+        }
     }
     if (full.item.recordMode == RecordMode.SETS) {
-        full.sets.sortedBy { it.orderIndex }.forEach { set ->
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("${set.orderIndex}세트", modifier = Modifier.size(width = 46.dp, height = 48.dp).padding(top = 14.dp))
-                NumberField("kg", set.actualWeightKg) { value -> vm.updateSet(set.copy(actualWeightKg = value)) }
-                NumberField("회", set.actualReps?.toDouble()) { value -> vm.updateSet(set.copy(actualReps = value?.toInt())) }
-                Checkbox(set.completed, onCheckedChange = { vm.updateSet(set.copy(completed = it)) })
-            }
-        }
+        StrengthSetRecorder(full, vm)
     } else {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             NumberField("분", full.item.durationMin) { vm.updateWorkoutItem(full.item.copy(durationMin = it)) }
@@ -316,14 +399,112 @@ private fun WorkoutInput(full: WorkoutItemWithSets, vm: MainViewModel) {
 }
 
 @Composable
-private fun NumberField(label: String, value: Double?, onChange: (Double?) -> Unit) {
+private fun StrengthSetRecorder(full: WorkoutItemWithSets, vm: MainViewModel) {
+    val sets = full.sets.sortedBy { it.orderIndex }
+    val completed = sets.filter { it.completed }
+    val next = sets.firstOrNull { !it.completed }
+    val targetSets = sets.size
+    val targetReps = sets.firstNotNullOfOrNull { it.plannedReps }
+
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                buildString {
+                    append("목표 ${targetSets}세트")
+                    targetReps?.let { append(" · 세트당 ${it}회") }
+                },
+                fontWeight = FontWeight.Bold,
+            )
+            Text("운동한 세트만 아래 기록에 쌓입니다.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text("${completed.size} / $targetSets", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+    }
+    Spacer(Modifier.height(8.dp))
+    LinearProgressIndicator(
+        progress = { completed.size.toFloat() / targetSets.coerceAtLeast(1) },
+        modifier = Modifier.fillMaxWidth(),
+    )
+    Spacer(Modifier.height(12.dp))
+
+    if (next != null) {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        ) {
+            Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("다음 ${next.orderIndex} / $targetSets 세트", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    NumberField(
+                        label = "중량 (kg)",
+                        value = next.actualWeightKg,
+                        modifier = Modifier.weight(1f),
+                    ) { value -> vm.updateSet(next.copy(actualWeightKg = value)) }
+                    NumberField(
+                        label = "횟수",
+                        value = next.actualReps?.toDouble(),
+                        modifier = Modifier.weight(1f),
+                    ) { value -> vm.updateSet(next.copy(actualReps = value?.toInt())) }
+                }
+                Button(
+                    onClick = { vm.setSetCompleted(next, true) },
+                    enabled = (next.actualReps ?: 0) > 0,
+                    modifier = Modifier.fillMaxWidth().testTag("record-set-${full.item.id}-${next.orderIndex}"),
+                ) {
+                    Icon(Icons.Rounded.CheckCircle, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("${next.orderIndex}세트 기록")
+                }
+            }
+        }
+    } else {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        ) {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.CheckCircle, null, tint = MaterialTheme.colorScheme.secondary)
+                Spacer(Modifier.width(8.dp))
+                Text("목표 세트를 모두 기록했어요.", fontWeight = FontWeight.Bold)
+            }
+        }
+    }
+
+    if (completed.isNotEmpty()) {
+        Spacer(Modifier.height(14.dp))
+        Text("완료 기록", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
+        completed.forEach { set ->
+            Row(
+                Modifier.fillMaxWidth().padding(vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("${set.orderIndex}세트", fontWeight = FontWeight.Bold)
+                    Text(setRecordSummary(set), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = { vm.setSetCompleted(set, false) }) {
+                    Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("수정")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NumberField(
+    label: String,
+    value: Double?,
+    modifier: Modifier = Modifier.width(84.dp),
+    onChange: (Double?) -> Unit,
+) {
     var text by remember(value) { mutableStateOf(value?.let { if (it % 1.0 == 0.0) it.toInt().toString() else it.toString() } ?: "") }
     OutlinedTextField(
         value = text,
         onValueChange = { new -> text = new; onChange(new.toDoubleOrNull()) },
         label = { Text(label) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-        modifier = Modifier.width(84.dp),
+        modifier = modifier,
         singleLine = true,
     )
 }
@@ -333,6 +514,26 @@ private fun GuideDialog(exercise: ExerciseEntity?, onDismiss: () -> Unit, onOpen
     var motionAngle by rememberSaveable(exercise?.id) { mutableStateOf("front") }
     val motionResource = when (exercise?.id) {
         "squat" -> if (motionAngle == "front") R.raw.squat_front else R.raw.squat_side
+        "flat-dumbbell-press" -> if (motionAngle == "front") {
+            R.raw.flat_dumbbell_press_front
+        } else {
+            R.raw.flat_dumbbell_press_side
+        }
+        "one-arm-dumbbell-row" -> if (motionAngle == "front") {
+            R.raw.one_arm_dumbbell_row_front
+        } else {
+            R.raw.one_arm_dumbbell_row_side
+        }
+        "shoulder-press" -> if (motionAngle == "front") {
+            R.raw.shoulder_press_front
+        } else {
+            R.raw.shoulder_press_side
+        }
+        "hammer-curl" -> if (motionAngle == "front") {
+            R.raw.hammer_curl_front
+        } else {
+            R.raw.hammer_curl_side
+        }
         else -> null
     }
     AlertDialog(
@@ -425,6 +626,12 @@ private fun RoutinesPage(state: MainUiState, vm: MainViewModel) {
                     Column(Modifier.weight(1f)) {
                         Text(routine.routine.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text("${routine.items.size}개 운동")
+                        Spacer(Modifier.height(7.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            routine.items.sortedBy { it.orderIndex }.take(6).forEach { item ->
+                                ExerciseIconBadge(item.exerciseId, item.category, size = 28.dp)
+                            }
+                        }
                     }
                     IconButton(onClick = { editing = routine }) { Icon(Icons.Rounded.Edit, "편집") }
                     IconButton(onClick = { vm.deleteRoutine(routine.routine.id) }) { Icon(Icons.Rounded.DeleteOutline, "삭제") }
@@ -436,6 +643,12 @@ private fun RoutinesPage(state: MainUiState, vm: MainViewModel) {
             AppCard {
                 Text(template.routine.name, fontWeight = FontWeight.Bold)
                 Text("${template.items.size}개 운동")
+                Spacer(Modifier.height(7.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    template.items.sortedBy { it.orderIndex }.take(6).forEach { item ->
+                        ExerciseIconBadge(item.exerciseId, item.category, size = 28.dp)
+                    }
+                }
                 TextButton(onClick = { vm.installTemplate(template.routine.id) }) {
                     Icon(Icons.Rounded.LibraryAdd, null)
                     Spacer(Modifier.width(5.dp))
@@ -468,6 +681,8 @@ internal fun RoutineDialog(existing: RoutineWithItems?, exercises: List<Exercise
                     items(exercises, key = { it.id }) { exercise ->
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Checkbox(exercise.id in selected, onCheckedChange = { checked -> if (checked) selected.add(exercise.id) else selected.remove(exercise.id) }, modifier = Modifier.testTag("exercise-${exercise.id}"))
+                            ExerciseIconBadge(exercise.id, exercise.category, size = 30.dp)
+                            Spacer(Modifier.width(8.dp))
                             Text(exercise.name)
                         }
                     }
@@ -483,8 +698,8 @@ internal fun RoutineDialog(existing: RoutineWithItems?, exercises: List<Exercise
 private fun HistoryPage(state: MainUiState, vm: MainViewModel) {
     var expanded by rememberSaveable { mutableStateOf<String?>(null) }
     var healthDialog by remember { mutableStateOf(false) }
-    val linkedSamsungIds = state.links.mapTo(mutableSetOf()) { it.samsungSessionId }
-    val visible = state.sessions.filterNot { it.session.source == WorkoutSource.SAMSUNG_HEALTH && it.session.id in linkedSamsungIds }
+    val linkedExternalIds = state.links.mapTo(mutableSetOf()) { it.samsungSessionId }
+    val visible = state.sessions.filterNot { it.session.source.isExternal() && it.session.id in linkedExternalIds }
     val totalMinutes = visible.sumOf { session ->
         session.session.endedAt?.let { ((it - session.session.startedAt) / 60_000).coerceAtLeast(0) } ?: 0
     }
@@ -515,22 +730,28 @@ private fun HistoryPage(state: MainUiState, vm: MainViewModel) {
         }
         items(visible, key = { it.session.id }) { session ->
             val link = state.links.firstOrNull { it.localSessionId == session.session.id }
-            val samsung = link?.let { target -> state.sessions.firstOrNull { it.session.id == target.samsungSessionId } }
+            val linkedExternal = link?.let { target -> state.sessions.firstOrNull { it.session.id == target.samsungSessionId } }
             AppCard(onClick = { expanded = if (expanded == session.session.id) null else session.session.id }) {
                 Text(session.session.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("${session.session.sessionDate} · ${durationText(samsung ?: session)}")
-                Text(sourceLabel(session.session.source) + if (samsung != null) " + 삼성 헬스 자동 연결" else "", color = MaterialTheme.colorScheme.secondary)
+                Text("${session.session.sessionDate} · ${durationText(linkedExternal ?: session)}")
+                Text(sourceLabel(session.session.source) + if (linkedExternal != null) " + ${sourceLabel(linkedExternal.session.source)} 자동 연결" else "", color = MaterialTheme.colorScheme.secondary)
                 if (expanded == session.session.id) {
                     Spacer(Modifier.height(8.dp))
                     session.items.sortedBy { it.item.orderIndex }.forEach { item ->
                         val detail = if (item.item.recordMode == RecordMode.SETS) "${item.sets.count { it.completed }}/${item.sets.size}세트" else "${item.item.durationMin ?: 0.0}분 · ${item.item.distanceKm ?: 0.0}km"
-                        Text("${item.item.exerciseName}  $detail")
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ExerciseIconBadge(item.item.exerciseId, item.item.category, size = 28.dp)
+                            Spacer(Modifier.width(8.dp))
+                            Text("${item.item.exerciseName}  $detail")
+                        }
+                        Spacer(Modifier.height(5.dp))
                     }
-                    samsung?.session?.distanceKm?.let { Text("삼성 거리 ${formatNumber(it)} km") }
-                    samsung?.session?.caloriesKcal?.let { Text("삼성 소모 ${formatNumber(it)} kcal") }
+                    linkedExternal?.session?.distanceKm?.let { Text("외부 거리 ${formatNumber(it)} km") }
+                    linkedExternal?.session?.caloriesKcal?.let { Text("외부 소모 ${formatNumber(it)} kcal") }
                     session.session.averageHeartRateBpm?.let { Text("워치 평균 심박 ${formatNumber(it)} bpm") }
-                    if (samsung == null) session.session.caloriesKcal?.let { Text("워치 소모 ${formatNumber(it)} kcal") }
-                    if (samsung == null) session.session.distanceKm?.let { Text("워치 거리 ${formatNumber(it)} km") }
+                    val metricSource = if (session.session.source.isExternal()) "외부" else "워치"
+                    if (linkedExternal == null) session.session.caloriesKcal?.let { Text("$metricSource 소모 ${formatNumber(it)} kcal") }
+                    if (linkedExternal == null) session.session.distanceKm?.let { Text("$metricSource 거리 ${formatNumber(it)} km") }
                     session.session.syncError?.let { Text("전송 오류: $it", color = MaterialTheme.colorScheme.error) }
                     TextButton(onClick = { vm.deleteSession(session.session.id) }) {
                         Icon(Icons.Rounded.DeleteOutline, null)
@@ -622,9 +843,10 @@ private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
     ) {
         item {
             AppCard {
-                Text("Health Connect · 삼성 헬스", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Health Connect · 삼성 헬스 · NRC", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Text(healthStatusLabel(state.healthStatus))
-                Text("삼성 헬스 원본만 가져오며, 권한이 없어도 로컬 운동은 그대로 작동합니다.")
+                Text("삼성 헬스의 운동·체성분과 NRC 러닝의 날짜·시간·거리·칼로리를 가져옵니다.")
+                Text("헬스 커넥트에서 Nike Run Club의 운동 쓰기와 오늘운동의 읽기 권한을 허용하세요.")
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text("포그라운드 동기화", modifier = Modifier.weight(1f))
@@ -653,6 +875,23 @@ private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
         }
         item {
             AppCard {
+                Text("세트 휴식 타이머", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("근력운동 세트를 완료하면 자동으로 시작하고, 종료 시 소리와 진동으로 알려줍니다.")
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    listOf(60, 90, 120, 180).forEach { seconds ->
+                        AssistChip(
+                            onClick = { vm.setRestTimerSeconds(seconds) },
+                            label = { Text(if (seconds < 60) "${seconds}초" else "${seconds / 60}분${if (seconds % 60 == 0) "" else " ${seconds % 60}초"}") },
+                            leadingIcon = if (state.restTimerSeconds == seconds) {{ Icon(Icons.Rounded.Check, "선택됨") }} else null,
+                        )
+                    }
+                }
+                Text("현재 ${formatCountdown(state.restTimerSeconds)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        item {
+            AppCard {
                 Text("주간 목표", fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     (1..7).forEach { number ->
@@ -668,7 +907,7 @@ private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
         item {
             AppCard {
                 Text("JSON 백업", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text("schemaVersion 2로 로컬 기록과 연결 ID를 저장합니다. 삼성 캐시는 복원 후 다시 동기화합니다.")
+                Text("schemaVersion 2로 로컬 기록과 연결 ID를 저장합니다. 외부 앱 캐시는 복원 후 다시 동기화합니다.")
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = { exportLauncher.launch("today-workout-${LocalDate.now()}.json") }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Rounded.UploadFile, null)
@@ -693,12 +932,51 @@ private fun AppCard(onClick: (() -> Unit)? = null, content: @Composable ColumnSc
     else Card(onClick = onClick, modifier = Modifier.fillMaxWidth(), colors = colors) { Column(Modifier.padding(16.dp), content = content) }
 }
 
+@Composable
+private fun ExerciseIconBadge(
+    exerciseId: String,
+    category: ExerciseCategory,
+    size: androidx.compose.ui.unit.Dp = 36.dp,
+) {
+    val (containerColor, contentColor) = when (category) {
+        ExerciseCategory.WEIGHT -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.onPrimaryContainer
+        ExerciseCategory.BODYWEIGHT -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        ExerciseCategory.CARDIO -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+    }
+    Surface(
+        modifier = Modifier.size(size),
+        shape = CircleShape,
+        color = containerColor,
+        contentColor = contentColor,
+    ) {
+        Box(Modifier.fillMaxSize().padding(5.dp), contentAlignment = Alignment.Center) {
+            Icon(exerciseIconVector(exerciseId, category), contentDescription = null, modifier = Modifier.fillMaxSize())
+        }
+    }
+}
+
+private fun exerciseIconVector(
+    exerciseId: String,
+    category: ExerciseCategory,
+): androidx.compose.ui.graphics.vector.ImageVector {
+    if (category == ExerciseCategory.CARDIO) return Icons.AutoMirrored.Rounded.DirectionsRun
+    return when (SeedData.exercises.firstOrNull { it.id == exerciseId }?.muscleGroup) {
+        "back" -> Icons.Rounded.Rowing
+        "legs" -> Icons.AutoMirrored.Rounded.DirectionsWalk
+        "core" -> Icons.Rounded.SelfImprovement
+        "shoulders" -> Icons.Rounded.AccessibilityNew
+        else -> if (category == ExerciseCategory.BODYWEIGHT) Icons.Rounded.AccessibilityNew else Icons.Rounded.FitnessCenter
+    }
+}
+
 @Composable private fun SectionTitle(value: String) = Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
 
 private fun sourceLabel(source: WorkoutSource) = when (source) {
     WorkoutSource.LOCAL -> "오늘운동"
     WorkoutSource.LEGACY_IMPORT -> "기존 PWA 가져오기"
     WorkoutSource.SAMSUNG_HEALTH -> "삼성 헬스"
+    WorkoutSource.GOOGLE_FIT -> "Nike Run Club · Google Fit(기존)"
+    WorkoutSource.NIKE_RUN_CLUB -> "Nike Run Club · Health Connect"
 }
 private fun healthStatusLabel(status: HealthConnectStatus) = when (status) {
     HealthConnectStatus.CONNECTED -> "연결됨"
@@ -711,6 +989,11 @@ private fun durationText(session: WorkoutSessionWithItems): String {
     return "${Duration.between(Instant.ofEpochMilli(session.session.startedAt), Instant.ofEpochMilli(end)).toMinutes().coerceAtLeast(0)}분"
 }
 private fun formatTime(epoch: Long): String = java.time.ZonedDateTime.ofInstant(Instant.ofEpochMilli(epoch), java.time.ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("M월 d일 HH:mm", Locale.KOREA))
+private fun formatCountdown(seconds: Int): String = "%02d:%02d".format(seconds.coerceAtLeast(0) / 60, seconds.coerceAtLeast(0) % 60)
+private fun setRecordSummary(set: com.hanshin.healthtask.data.db.SetRecordEntity): String = buildList {
+    set.actualWeightKg?.let { add("${formatNumber(it)}kg") }
+    set.actualReps?.let { add("${it}회") }
+}.joinToString(" × ").ifBlank { "세트 기록됨" }
 private fun metricLabel(type: HealthMetricType) = when (type) {
     HealthMetricType.WEIGHT_KG -> "체중"
     HealthMetricType.BODY_FAT_PERCENT -> "체지방률"

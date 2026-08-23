@@ -26,6 +26,7 @@ class PhoneWatchGateway(context: Context) {
         routine: RoutineWithItems?,
         exercises: List<ExerciseEntity>,
         sessions: List<WorkoutSessionWithItems>,
+        restTimerSeconds: Int,
     ) {
         if (routine == null) {
             dataClient.deleteDataItems("wear:${WearPaths.TODAY_ROUTINE}".toUri(), DataClient.FILTER_LITERAL).await()
@@ -35,6 +36,7 @@ class PhoneWatchGateway(context: Context) {
         val payload = WearRoutinePayload(
             routineId = routine.routine.id,
             title = routine.routine.name,
+            restTimerSeconds = restTimerSeconds,
             exercises = routine.items.sortedBy { it.orderIndex }.map { plan ->
                 val exercise = exerciseMap[plan.exerciseId]
                 val recent = latestCompletedSet(sessions, plan.exerciseId)

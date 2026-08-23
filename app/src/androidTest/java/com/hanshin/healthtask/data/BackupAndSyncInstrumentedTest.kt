@@ -17,6 +17,9 @@ import com.hanshin.healthtask.health.HealthConnectGateway
 import com.hanshin.healthtask.health.HealthConnectSnapshot
 import com.hanshin.healthtask.health.HealthConnectStatus
 import com.hanshin.healthtask.health.HealthSyncManager
+import com.hanshin.healthtask.domain.ExternalWorkout
+import com.hanshin.healthtask.domain.NIKE_RUN_CLUB_PACKAGE
+import java.time.Instant
 import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutineExercise
@@ -114,6 +117,37 @@ class BackupAndSyncInstrumentedTest {
         assertEquals(WorkoutStatus.ACTIVE, reopened.dao().getSession("active-session")!!.session.status)
         reopened.close()
         context.deleteDatabase(databaseName)
+        Unit
+    }
+
+    @Test fun healthConnectNikeRunImportsAndDoesNotDuplicate() = runBlocking {
+        val started = Instant.parse("2026-08-20T22:00:00Z")
+        val run = ExternalWorkout(
+            recordId = "health-connect-nrc-run-1",
+            title = "Morning Run",
+            category = ExerciseCategory.CARDIO,
+            start = started,
+            end = started.plusSeconds(30 * 60),
+            distanceKm = 5.25,
+            caloriesKcal = 320.0,
+            source = WorkoutSource.NIKE_RUN_CLUB,
+            sourcePackage = NIKE_RUN_CLUB_PACKAGE,
+        )
+        val manager = HealthSyncManager(
+            database,
+            FakeGateway(snapshot = HealthConnectSnapshot(listOf(run), emptyList())),
+            AppPreferences(context),
+        )
+
+        manager.sync(force = true)
+        manager.sync(force = true)
+
+        val imported = database.dao().getSessions().filter { it.session.source == WorkoutSource.NIKE_RUN_CLUB }
+        assertEquals(1, imported.size)
+        assertEquals(5.25, imported.single().session.distanceKm!!, 0.001)
+        assertEquals(5.25, imported.single().items.single().item.distanceKm!!, 0.001)
+        assertEquals(320.0, imported.single().session.caloriesKcal!!, 0.001)
+        assertEquals(NIKE_RUN_CLUB_PACKAGE, imported.single().session.sourcePackage)
     }
 
     @Test fun watchWorkoutImportIsIdempotentAndKeepsSensorSummary() = runBlocking {
@@ -147,11 +181,15 @@ class BackupAndSyncInstrumentedTest {
     }
 }
 
-private class FakeGateway(private var failuresBeforeSuccess: Int = 0) : HealthConnectGateway {
+private class FakeGateway(
+    private var failuresBeforeSuccess: Int = 0,
+    private val statusValue: HealthConnectStatus = HealthConnectStatus.CONNECTED,
+    private val snapshot: HealthConnectSnapshot = HealthConnectSnapshot(emptyList(), emptyList(), nextChangesToken = "next-token"),
+) : HealthConnectGateway {
     var writeCalls = 0
     override val requiredPermissions = emptySet<String>()
-    override suspend fun status() = HealthConnectStatus.CONNECTED
-    override suspend fun readSamsungData(changesToken: String?) = HealthConnectSnapshot(emptyList(), emptyList(), nextChangesToken = "next-token")
+    override suspend fun status() = statusValue
+    override suspend fun readHealthConnectData(changesToken: String?) = snapshot
     override suspend fun writeWorkout(summary: WorkoutSummary): String {
         writeCalls++
         if (failuresBeforeSuccess-- > 0) error("temporary")

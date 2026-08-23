@@ -30,6 +30,11 @@ class WorkoutPoliciesTest {
         assertEquals(1, weeklyGoalCount(listOf(local, external), listOf(link), today))
     }
 
+    @Test fun `unlinked NRC run counts toward weekly goal`() {
+        val run = session("nike-run", WorkoutSource.NIKE_RUN_CLUB, start, start + 30 * 60_000)
+        assertEquals(1, weeklyGoalCount(listOf(run), emptyList(), today))
+    }
+
     @Test fun `Samsung workout never advances routine order`() {
         val samsung = session("external", WorkoutSource.SAMSUNG_HEALTH, start, start + 40 * 60_000)
         assertEquals(0, nextRoutineIndex(listOf(samsung), 3))

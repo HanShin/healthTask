@@ -9,12 +9,15 @@ object WearPaths {
 
 enum class WearRecordMode { SETS, CARDIO }
 
+const val DEFAULT_REST_TIMER_SECONDS = 90
+
 data class WearRoutinePayload(
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = 2,
     val routineId: String,
     val title: String,
     val exercises: List<WearRoutineExercise>,
     val updatedAt: Long,
+    val restTimerSeconds: Int = DEFAULT_REST_TIMER_SECONDS,
 )
 
 data class WearRoutineExercise(
@@ -47,10 +50,17 @@ data class WearActiveSession(
     val paused: Boolean = false,
     val pausedAt: Long? = null,
     val accumulatedPausedMillis: Long = 0L,
+    val restEndsAt: Long? = null,
 )
 
 fun WearActiveSession.elapsedMillis(now: Long = System.currentTimeMillis()): Long =
     ((pausedAt ?: now) - startedAt - accumulatedPausedMillis).coerceAtLeast(0L)
+
+fun remainingRestSeconds(restEndsAt: Long?, now: Long = System.currentTimeMillis()): Int {
+    val remainingMillis = (restEndsAt ?: return 0) - now
+    if (remainingMillis <= 0L) return 0
+    return ((remainingMillis + 999L) / 1_000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+}
 
 data class WearCompletedWorkout(
     val schemaVersion: Int = 1,

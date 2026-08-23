@@ -21,7 +21,10 @@ from mathutils import Vector
 
 
 FPS = 30
-FRAME_END = 180
+# Frame 241 duplicates frame 1 and is omitted from the encoded movie. The
+# resulting 240 frames give every exercise one readable 8-second repetition at
+# 30 fps.
+FRAME_END = 241
 RESOLUTION = 720
 
 
@@ -358,7 +361,13 @@ def build_scene():
 
 def configure_scene() -> None:
     scene = bpy.context.scene
-    scene.render.engine = "BLENDER_EEVEE_NEXT"
+    try:
+        scene.render.engine = "BLENDER_EEVEE_NEXT"
+    except TypeError:
+        # Blender 5.2 folded Eevee Next back into the BLENDER_EEVEE enum.
+        # Keep the generator reproducible with both the original 4.5 LTS
+        # toolchain and newer LTS installations.
+        scene.render.engine = "BLENDER_EEVEE"
     scene.render.resolution_x = RESOLUTION
     scene.render.resolution_y = RESOLUTION
     scene.render.resolution_percentage = 100
@@ -385,7 +394,7 @@ def render_preview(output_dir: str, cameras: dict) -> None:
     preview_dir = os.path.join(os.path.dirname(output_dir), "..", "..", "..", "..", "design", "motion", "previews")
     preview_dir = os.path.abspath(preview_dir)
     os.makedirs(preview_dir, exist_ok=True)
-    scene.frame_set(76)
+    scene.frame_set(121)
     for name, camera in cameras.items():
         scene.camera = camera
         scene.render.image_settings.file_format = "PNG"
@@ -400,7 +409,7 @@ def render_movies(output_dir: str, cameras: dict) -> None:
     for name, camera in cameras.items():
         scene.camera = camera
         scene.frame_start = 1
-        scene.frame_end = FRAME_END - 1  # Frame 180 equals frame 1; omit it for a clean loop.
+        scene.frame_end = FRAME_END - 1  # Frame 241 equals frame 1; omit it for a clean loop.
         scene.render.image_settings.file_format = "FFMPEG"
         scene.render.ffmpeg.format = "MPEG4"
         scene.render.ffmpeg.codec = "H264"

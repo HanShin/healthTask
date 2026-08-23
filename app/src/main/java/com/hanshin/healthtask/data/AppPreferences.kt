@@ -3,8 +3,10 @@ package com.hanshin.healthtask.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.hanshin.healthtask.shared.DEFAULT_REST_TIMER_SECONDS
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -18,6 +20,7 @@ data class SyncPreferences(
 class AppPreferences(private val context: Context) {
     private val syncEnabled = booleanPreferencesKey("health_connect_sync_enabled")
     private val lastSyncAt = longPreferencesKey("health_connect_last_sync_at")
+    private val configuredRestTimerSeconds = intPreferencesKey("rest_timer_seconds")
 
     val sync: Flow<SyncPreferences> = context.dataStore.data.map { values ->
         SyncPreferences(
@@ -26,11 +29,19 @@ class AppPreferences(private val context: Context) {
         )
     }
 
+    val restTimerSeconds: Flow<Int> = context.dataStore.data.map { values ->
+        (values[configuredRestTimerSeconds] ?: DEFAULT_REST_TIMER_SECONDS).coerceIn(15, 600)
+    }
+
     suspend fun setSyncEnabled(enabled: Boolean) {
         context.dataStore.edit { it[syncEnabled] = enabled }
     }
 
     suspend fun markSynced(at: Long = System.currentTimeMillis()) {
         context.dataStore.edit { it[lastSyncAt] = at }
+    }
+
+    suspend fun setRestTimerSeconds(seconds: Int) {
+        context.dataStore.edit { it[configuredRestTimerSeconds] = seconds.coerceIn(15, 600) }
     }
 }
