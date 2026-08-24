@@ -14,8 +14,9 @@
 - `app/src/androidTest`: Room, legacy import, Health Connect 재시도 테스트
 - `shared`: 휴대폰/워치 Data Layer 프로토콜과 경과 시간 규칙
 - `wear/src/main/java`: Watch9 Compose UI, DataStore, Data Layer, Health Services
-- `app/src/main/res/raw`: 스쿼트 정면·측면 오프라인 3D 모션 MP4
+- `app/src/main/res/raw`: 완성 운동 6종의 정면·측면 오프라인 3D 모션 MP4 12개
 - `design/motion` 및 `tools/blender`: 최종 Blender 원본과 재생성 스크립트
+- `tools/verify_motion_videos.py`: 12개 MP4의 H.264·720p·8초·240프레임·무음 규격 검사
 
 ## 남은 실환경 작업
 
@@ -30,6 +31,6 @@
 
 거리와 칼로리는 현재 합의한 제한 권한에 포함되지 않으므로 Health Connect 외부 기록에서 값이 없을 수 있습니다. 앱은 해당 값을 nullable로 유지하며 시간과 원본 앱 표시는 항상 제공합니다.
 
-스쿼트 3D 가이드는 MakeHuman Community의 CC0 베이스 메시·시스템 자산과 MPFB 2.0.17로 생성했습니다. 실제 하이바 스쿼트 정면·측면 Shorts를 자세 레퍼런스로만 사용해 MPFB 다리 IK 축(-90도), 고정된 발, 무릎 트래킹, 골반·척추 회전, 바벨 수직 경로, 손 그립을 재제작했습니다. 앱에는 자체 렌더된 MP4만 포함되며, Media3 1.11.0이 무음 반복 재생합니다. 다른 운동은 기존 SVG 가이드를 유지합니다.
+완성된 사람형 3D 가이드는 바벨 스쿼트, 플랫 덤벨 프레스, 원암 덤벨 로우, 숄더프레스, 해머 컬, 덤벨 고블릿 스쿼트의 6종입니다. 각 운동은 정면·측면 자체 렌더 MP4를 앱에 포함하며 Media3 1.11.0이 무음 반복 재생합니다. 나머지 운동은 기존 SVG 가이드를 유지합니다. 사람형과 시스템 자산은 MakeHuman Community의 CC0 자산 및 MPFB 2.0.17을 사용했고, 자세·장비·애니메이션은 프로젝트 안에서 제작했습니다.
 
 새 3D 운동을 제작하거나 기존 모션을 수정할 때는 `docs/MOTION_QUALITY_STANDARD.md`를 완료 조건으로 사용합니다. 특히 장비를 잡는 손은 주먹 포즈로 대체하지 않고 손가락 뿌리 축을 장비와 정렬한 뒤 관절별 접촉을 계산하며, 정면·사선·후면 근접 렌더까지 통과해야 합니다. 현재 스쿼트의 `design/motion/previews/human_squat_grip_{front,angle,rear}.png`가 최소 시각 품질 기준입니다.

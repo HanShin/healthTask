@@ -42,9 +42,40 @@ from generate_squat_sample import (  # noqa: E402
     rounded_cube,
     smoothstep,
 )
+from motion_collision import assert_no_mesh_intersections  # noqa: E402
 
 
 EXERCISE = "one_arm_dumbbell_row"
+TOP_FRAME = 1
+MID_FRAME = 61
+BOTTOM_FRAME = 121
+
+ATHLETE_MESHES = (
+    "Human",
+    "Human.eyebrow004",
+    "Human.eyelashes01",
+    "Human.female_sportsuit01",
+    "Human.low-poly",
+    "Human.ponytail01",
+    "Human.shoes05",
+    "Rigged compression shorts",
+)
+
+BENCH_COLLIDERS = (
+    "Row bench pad",
+    "Row bench spine",
+    "Row bench leg +0.06",
+    "Row bench foot +0.06",
+    "Row bench leg +0.84",
+    "Row bench foot +0.84",
+)
+
+DUMBBELL_PLATE_COLLIDERS = (
+    "R row dumbbell plate +1",
+    "R row dumbbell plate -1",
+    "R row dumbbell cap +1",
+    "R row dumbbell cap -1",
+)
 
 
 def parse_args():
@@ -54,7 +85,7 @@ def parse_args():
     parser.add_argument("--blend", required=True)
     parser.add_argument(
         "--mode",
-        choices=("preview", "render"),
+        choices=("preview", "contact", "render", "validate"),
         default="preview",
     )
     return parser.parse_args(argv)
@@ -173,7 +204,9 @@ def build_equipment():
 
     # A lower bench keeps the supporting arm and thigh close to vertical while
     # the opposite foot can remain planted with this athlete's proportions.
-    rounded_cube("Row bench pad", (0.0, 0.45, 0.38), (0.15, 0.61, 0.06), mats["pad"], bevel=0.035)
+    # The support knee and shin surface sit at roughly 0.35 m. A 0.345 m pad
+    # top leaves a small render-safe gap instead of embedding the leg meshes.
+    rounded_cube("Row bench pad", (0.0, 0.45, 0.285), (0.15, 0.61, 0.06), mats["pad"], bevel=0.035)
     rounded_cube("Row bench spine", (0.0, 0.45, 0.23), (0.035, 0.50, 0.035), mats["frame"], bevel=0.018)
     for y in (0.06, 0.84):
         rounded_cube(f"Row bench leg {y:+.2f}", (0.0, y, 0.19), (0.035, 0.035, 0.13), mats["frame"], bevel=0.015)
@@ -213,21 +246,21 @@ def build_equipment():
 def animate(rig, standing_foot_rotations, dumbbell):
     # Right arm rows; left hand and knee support the athlete on the bench.
     # The torso, head and pelvis remain fixed to make trunk rotation impossible.
-    # Rotate the torso 18 degrees above horizontal around the hip. Lowering the
+    # Rotate the torso 14 degrees above horizontal around the hip. Lowering the
     # rig origin at the same time preserves both leg contacts but raises the
     # shoulders enough for a genuinely extended support arm.
     rig.location = (0.0, 1.40, 0.531)
-    rig.rotation_euler = (math.radians(72), 0.0, 0.0)
+    rig.rotation_euler = (math.radians(76), 0.0, 0.0)
 
     # The rest neck slopes down after the athlete is tipped into the row. Its
     # local X axis is the anatomical left-right axis, so a small extension
     # restores the thoracic line without flipping the head's world direction.
     neck = rig.pose.bones["neck_01"]
     neck.rotation_mode = "XYZ"
-    neck.rotation_euler = (math.radians(-18.0), 0.0, 0.0)
+    neck.rotation_euler = (math.radians(-14.0), 0.0, 0.0)
     head = rig.pose.bones["head"]
     head.rotation_mode = "XYZ"
-    head.rotation_euler = (math.radians(18.0), 0.0, 0.0)
+    head.rotation_euler = (math.radians(14.0), 0.0, 0.0)
     right_foot = empty("R row foot target", (-0.30, 0.67, 0.062))
     right_knee = empty("R row knee pole", (-0.22, 0.50, 0.40))
     add_ik(rig, "calf_r", right_foot, right_knee)
@@ -241,8 +274,8 @@ def animate(rig, standing_foot_rotations, dumbbell):
 
     # Keep the entire palm inside the 0.30 m pad. The wrist sits above the pad
     # by the hand's measured thickness so the palm surface, not its edge,
-    # contacts the 0.44 m top plane.
-    support_hand = empty("L row support hand target", (0.08, 0.14, 0.484))
+    # contacts the 0.345 m top plane.
+    support_hand = empty("L row support hand target", (0.08, 0.14, 0.370))
     support_elbow = empty("L row support elbow pole", (0.24, 0.15, 0.68))
     add_ik(rig, "lowerarm_l", support_hand, support_elbow)
     set_hand_rotation(
@@ -274,7 +307,7 @@ def animate(rig, standing_foot_rotations, dumbbell):
         pull = row_pull(frame)
         center = Vector(
             (
-                -0.220,
+                -0.280,
                 0.280 + 0.150 * pull,
                 0.424 + 0.174 * pull,
             )
@@ -289,7 +322,7 @@ def animate(rig, standing_foot_rotations, dumbbell):
         working_hand.keyframe_insert("location", frame=frame)
         working_elbow.location = Vector(
             (
-                -0.240 + 0.020 * pull,
+                    -0.300 + 0.020 * pull,
                 0.300 + 0.190 * pull,
                 0.680 + 0.090 * pull,
             )
@@ -297,6 +330,14 @@ def animate(rig, standing_foot_rotations, dumbbell):
         working_elbow.keyframe_insert("location", frame=frame)
 
     bpy.context.scene.frame_set(1)
+
+
+def validate_equipment_clearance():
+    """Reject bench or dumbbell-plate penetration at the three key poses."""
+    frames = (TOP_FRAME, MID_FRAME, BOTTOM_FRAME)
+    assert_no_mesh_intersections(ATHLETE_MESHES, BENCH_COLLIDERS, frames)
+    # The handle is enclosed by the grip; plates and caps remain clear.
+    assert_no_mesh_intersections(ATHLETE_MESHES, DUMBBELL_PLATE_COLLIDERS, frames)
 
 
 def build_cameras_and_lights():
@@ -412,6 +453,8 @@ def render_support_hand_preview(output_dir):
 
 def render_movies(cameras, output_dir):
     scene = bpy.context.scene
+    if hasattr(scene, "eevee"):
+        scene.eevee.taa_render_samples = 4
     os.makedirs(output_dir, exist_ok=True)
     for name, camera in cameras.items():
         scene.camera = camera
@@ -477,6 +520,7 @@ def main():
     configure_athlete_materials()
     dumbbell = build_equipment()
     animate(rig, standing_foot_rotations, dumbbell)
+    validate_equipment_clearance()
     cameras = build_cameras_and_lights()
     bpy.context.scene.camera = cameras["front"]
     os.makedirs(os.path.dirname(blend_path), exist_ok=True)
@@ -484,7 +528,9 @@ def main():
     print("BLEND", blend_path)
     if args.mode == "preview":
         render_previews(cameras, output_dir)
-    else:
+    elif args.mode == "contact":
+        render_support_hand_preview(output_dir)
+    elif args.mode == "render":
         render_movies(cameras, output_dir)
 
 

@@ -39,9 +39,44 @@ from generate_squat_sample import (  # noqa: E402
     smoothstep,
     torus,
 )
+from motion_collision import assert_no_mesh_intersections  # noqa: E402
 
 
 EXERCISE = "flat_dumbbell_press"
+TOP_FRAME = 1
+MID_FRAME = 61
+BOTTOM_FRAME = 121
+
+ATHLETE_MESHES = (
+    "Human",
+    "Human.eyebrow004",
+    "Human.eyelashes01",
+    "Human.female_sportsuit01",
+    "Human.low-poly",
+    "Human.ponytail01",
+    "Human.shoes05",
+    "Rigged compression shorts",
+)
+
+BENCH_COLLIDERS = (
+    "Flat bench pad",
+    "Flat bench spine",
+    "Bench leg +0.28",
+    "Bench foot +0.28",
+    "Bench leg +1.06",
+    "Bench foot +1.06",
+)
+
+DUMBBELL_PLATE_COLLIDERS = (
+    "L dumbbell plate +1",
+    "L dumbbell plate -1",
+    "L dumbbell cap +1",
+    "L dumbbell cap -1",
+    "R dumbbell plate +1",
+    "R dumbbell plate -1",
+    "R dumbbell cap +1",
+    "R dumbbell cap -1",
+)
 
 
 def parse_args():
@@ -191,6 +226,53 @@ def configure_athlete_materials():
                 subsurface.default_value = 0.055 if material_name == "Human.body" else 0.0
 
 
+def tuck_ponytail_beside_bench():
+    """Lay the ponytail beside the head instead of through the bench pad."""
+    hair = bpy.data.objects["Human.ponytail01"]
+    scene = bpy.context.scene
+    scene.frame_set(TOP_FRAME)
+
+    # Classify the hanging section in the evaluated, supine pose. The
+    # displacement sits after the armature so it follows the already-posed
+    # hair and moves only the portion that would be compressed by the pad.
+    subdivisions = [modifier for modifier in hair.modifiers if modifier.type == "SUBSURF"]
+    subdivision_visibility = [modifier.show_viewport for modifier in subdivisions]
+    try:
+        for modifier in subdivisions:
+            modifier.show_viewport = False
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        evaluated = hair.evaluated_get(depsgraph)
+        mesh = evaluated.to_mesh(preserve_all_data_layers=False, depsgraph=depsgraph)
+        try:
+            evaluated_points = [evaluated.matrix_world @ vertex.co for vertex in mesh.vertices]
+        finally:
+            evaluated.to_mesh_clear()
+    finally:
+        for modifier, visible in zip(subdivisions, subdivision_visibility):
+            modifier.show_viewport = visible
+
+    old_group = hair.vertex_groups.get("Bench side tuck")
+    if old_group is not None:
+        hair.vertex_groups.remove(old_group)
+    old_modifier = hair.modifiers.get("Bench side tuck")
+    if old_modifier is not None:
+        hair.modifiers.remove(old_modifier)
+
+    group = hair.vertex_groups.new(name="Bench side tuck")
+    for index, point in enumerate(evaluated_points):
+        weight = max(0.0, min(1.0, (0.60 - point.z) / 0.08))
+        if weight > 0.0:
+            group.add([index], weight, "REPLACE")
+
+    displacement = hair.modifiers.new("Bench side tuck", "DISPLACE")
+    displacement.direction = "X"
+    displacement.strength = 0.24
+    displacement.mid_level = 0.0
+    displacement.vertex_group = group.name
+    bpy.context.view_layer.objects.active = hair
+    bpy.ops.object.modifier_move_to_index(modifier=displacement.name, index=1)
+
+
 def build_bench_and_dumbbells():
     mats = {
         "pad": material("Press bench pad", (0.035, 0.045, 0.075, 1.0), roughness=0.48),
@@ -204,9 +286,12 @@ def build_bench_and_dumbbells():
     # Center the 1.22 x 0.30 m pad between the athlete's glutes and head. Its
     # 0.55 m top surface closes the small visible gap under the glutes and
     # shoulder blades without flattening the natural lumbar curve.
-    rounded_cube("Flat bench pad", (0.0, 0.41, 0.49), (0.15, 0.61, 0.06), mats["pad"], bevel=0.035)
-    rounded_cube("Flat bench spine", (0.0, 0.41, 0.30), (0.035, 0.50, 0.035), mats["frame"], bevel=0.018)
-    for y in (0.02, 0.80):
+    # Start the full 1.22 m pad at the glute fold instead of extending it under
+    # the hanging thighs. This preserves head and upper-back support without
+    # expressing contact as clothing penetration.
+    rounded_cube("Flat bench pad", (0.0, 0.67, 0.49), (0.15, 0.61, 0.06), mats["pad"], bevel=0.035)
+    rounded_cube("Flat bench spine", (0.0, 0.67, 0.30), (0.035, 0.50, 0.035), mats["frame"], bevel=0.018)
+    for y in (0.28, 1.06):
         rounded_cube(f"Bench leg {y:+.2f}", (0.0, y, 0.24), (0.035, 0.035, 0.20), mats["frame"], bevel=0.015)
         rounded_cube(f"Bench foot {y:+.2f}", (0.0, y, 0.045), (0.31, 0.045, 0.035), mats["frame"], bevel=0.018)
 
@@ -389,6 +474,14 @@ def animate(rig, foot_rotations, dumbbells):
     bpy.context.scene.frame_set(1)
 
 
+def validate_equipment_clearance():
+    """Reject bench or dumbbell-plate penetration at the three key poses."""
+    frames = (TOP_FRAME, MID_FRAME, BOTTOM_FRAME)
+    assert_no_mesh_intersections(ATHLETE_MESHES, BENCH_COLLIDERS, frames)
+    # Handles intentionally sit inside the closed grip; plates and caps do not.
+    assert_no_mesh_intersections(ATHLETE_MESHES, DUMBBELL_PLATE_COLLIDERS, frames)
+
+
 def build_cameras_and_lights():
     cameras = {}
     for name, location, target, lens in (
@@ -482,6 +575,11 @@ def render_grip_previews(output_dir):
 
 def render_movies(cameras, output_dir):
     scene = bpy.context.scene
+    # Four temporal samples are sufficient for this low-noise studio at the
+    # 720 px delivery size and
+    # keep full 480-frame regeneration practical on the supported Mac setup.
+    if hasattr(scene, "eevee"):
+        scene.eevee.taa_render_samples = 4
     os.makedirs(output_dir, exist_ok=True)
     for name, camera in cameras.items():
         scene.camera = camera
@@ -555,6 +653,8 @@ def main():
     configure_athlete_materials()
     dumbbells = build_bench_and_dumbbells()
     animate(rig, foot_rotations, dumbbells)
+    tuck_ponytail_beside_bench()
+    validate_equipment_clearance()
     cameras = build_cameras_and_lights()
     bpy.context.scene.camera = cameras["front"]
     os.makedirs(os.path.dirname(blend_path), exist_ok=True)

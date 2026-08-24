@@ -15,7 +15,7 @@
 - 완료한 로컬 운동 요약을 Health Connect에 쓰기
 - 같은 날짜·호환 운동·70% 이상 시간 중첩 시 로컬/외부 기록 자동 연결
 - 오프라인 SVG 운동 가이드와 외부 YouTube 링크
-- 스쿼트·플랫 덤벨 프레스·원암 덤벨 로우 정면/측면 사람형 3D 모션 가이드와 자동 반복 재생
+- 스쿼트·플랫 덤벨 프레스·원암 덤벨 로우·숄더프레스·해머 컬·덤벨 고블릿 스쿼트 정면/측면 사람형 3D 모션 가이드와 자동 반복 재생
 - Galaxy Watch용 Wear OS 앱과 오늘 루틴 자동 전송
 - 워치의 오프라인 세트·횟수·중량 기록 및 진행 중 세션 복원
 - Health Services 기반 심박·평균 심박·칼로리·유산소 거리 측정
@@ -42,7 +42,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 ## 3D 운동 모션 가이드
 
-바벨 스쿼트, 플랫 덤벨 프레스와 원암 덤벨 로우 가이드는 APK에 포함된 정면·측면 H.264 영상을 Media3로 무음 자동 반복합니다. 앱에서 운동 이름 옆 가이드 아이콘을 누른 뒤 `정면 / 측면`을 선택하면 됩니다. 네트워크는 필요하지 않습니다.
+완성된 6개 운동 가이드(바벨 스쿼트, 플랫 덤벨 프레스, 원암 덤벨 로우, 숄더프레스, 해머 컬, 덤벨 고블릿 스쿼트)는 각각 APK에 포함된 정면·측면 H.264 영상을 Media3로 무음 자동 반복합니다. 앱에서 운동 이름 옆 가이드 아이콘을 누른 뒤 `정면 / 측면`을 선택하면 됩니다. 네트워크는 필요하지 않습니다.
 
 모션은 실제 하이바 백스쿼트의 [측면 자세](https://www.youtube.com/shorts/KqbKmBSDVS4)와 [정면·사선 튜토리얼](https://www.youtube.com/shorts/lHyQ4Jy0LSA)을 시각 레퍼런스로 삼아 새로 제작했습니다. 영상 자체는 복제하거나 앱에 포함하지 않았습니다. 발 고정, 무릎의 발끝 방향 진행, 골반의 후하방 이동, 중립 척추, 바벨의 발 중앙 수직 경로와 손 그립을 독립 제어합니다.
 
@@ -51,6 +51,8 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 플랫 덤벨 프레스는 승인된 스쿼트 사람 모델을 그대로 사용하고 벤치, 덤벨, 발·팔 IK와 카메라만 운동별로 구성합니다. 원본은 `design/motion/flat_dumbbell_press_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_flat_dumbbell_press.py`, 동작 정의와 검수 기록은 `docs/motions/FLAT_DUMBBELL_PRESS.md`에 있습니다.
 
 원암 덤벨 로우는 왼손·왼무릎·오른발의 세 지점을 고정하고 오른팔만 당기는 단측 모션입니다. 원본은 `design/motion/one_arm_dumbbell_row_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_one_arm_dumbbell_row.py`, 동작 정의는 `docs/motions/ONE_ARM_DUMBBELL_ROW.md`에 있습니다.
+
+숄더프레스와 해머 컬도 같은 사람형·스튜디오·덤벨 규격을 사용합니다. 덤벨 고블릿 스쿼트는 승인된 스쿼트 하체 제어를 보존하고 양손으로 수직 덤벨의 위쪽 원판을 받치는 동작이며, 원본은 `design/motion/dumbbell_goblet_squat_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_dumbbell_goblet_squat.py`, 동작 정의는 `docs/motions/DUMBBELL_GOBLET_SQUAT.md`에 있습니다.
 
 ```bash
 # 6개 자세와 3개 그립 근접 화면을 먼저 생성
@@ -66,6 +68,9 @@ blender -b design/motion/squat_human_sample.blend \
   --output-dir app/src/main/res/raw \
   --blend design/motion/flat_dumbbell_press_human_sample.blend \
   --mode render
+
+# 전체 MP4 개수·코덱·해상도·길이·프레임·무음 여부 확인
+python3 tools/verify_motion_videos.py
 ```
 
 새 운동 모션은 [운동 모션 품질 기준](docs/MOTION_QUALITY_STANDARD.md)의 레퍼런스, 인체 비율, 장비 접촉, 정면·측면 단계별 검수, 접촉 부위 근접 검수와 루프 기준을 모두 통과해야 합니다. 스쿼트의 손 그립 정면·사선·후면 근접 렌더를 시각적 하한선으로 사용합니다.

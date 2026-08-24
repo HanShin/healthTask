@@ -8,7 +8,7 @@
 2. `one-arm-dumbbell-row` 원암 덤벨 로우 — 완료
 3. `shoulder-press` 숄더프레스 — 완료
 4. `hammer-curl` 해머 컬 — 완료
-5. `dumbbell-goblet-squat` 덤벨 고블릿 스쿼트
+5. `dumbbell-goblet-squat` 덤벨 고블릿 스쿼트 — 완료
 6. `dumbbell-romanian-deadlift` 덤벨 루마니안 데드리프트
 7. `dumbbell-bulgarian-split-squat` 덤벨 불가리안 스플릿 스쿼트
 8. `plank` 플랭크

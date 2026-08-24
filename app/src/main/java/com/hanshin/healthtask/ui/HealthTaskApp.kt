@@ -534,6 +534,11 @@ private fun GuideDialog(exercise: ExerciseEntity?, onDismiss: () -> Unit, onOpen
         } else {
             R.raw.hammer_curl_side
         }
+        "dumbbell-goblet-squat" -> if (motionAngle == "front") {
+            R.raw.dumbbell_goblet_squat_front
+        } else {
+            R.raw.dumbbell_goblet_squat_side
+        }
         else -> null
     }
     AlertDialog(
