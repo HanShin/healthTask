@@ -157,7 +157,10 @@ class HealthSyncManager(
                     title = session.title,
                     category = category,
                     startedAt = java.time.Instant.ofEpochMilli(session.startedAt),
-                    endedAt = java.time.Instant.ofEpochMilli(session.endedAt),
+                    endedAt = java.time.Instant.ofEpochMilli(
+                        session.activeDurationMillis?.let { session.startedAt + it } ?: session.endedAt
+                    ),
+                    distanceKm = session.distanceKm,
                 ))
                 dao.updateSession(session.copy(
                     healthConnectRecordId = recordId,

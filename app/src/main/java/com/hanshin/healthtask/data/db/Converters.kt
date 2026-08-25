@@ -3,8 +3,10 @@ package com.hanshin.healthtask.data.db
 import androidx.room.TypeConverter
 import com.hanshin.healthtask.domain.ExerciseCategory
 import com.hanshin.healthtask.domain.HealthMetricType
+import com.hanshin.healthtask.domain.PlannedWorkoutType
 import com.hanshin.healthtask.domain.RecordMode
 import com.hanshin.healthtask.domain.SyncStatus
+import com.hanshin.healthtask.domain.TrainingGoalType
 import com.hanshin.healthtask.domain.WorkoutSource
 import com.hanshin.healthtask.domain.WorkoutStatus
 
@@ -21,4 +23,8 @@ class Converters {
     @TypeConverter fun workoutStatus(value: String): WorkoutStatus = WorkoutStatus.valueOf(value)
     @TypeConverter fun healthMetric(value: HealthMetricType): String = value.name
     @TypeConverter fun healthMetric(value: String): HealthMetricType = HealthMetricType.valueOf(value)
+    @TypeConverter fun trainingGoal(value: TrainingGoalType): String = value.name
+    @TypeConverter fun trainingGoal(value: String): TrainingGoalType = TrainingGoalType.valueOf(value)
+    @TypeConverter fun plannedWorkout(value: PlannedWorkoutType): String = value.name
+    @TypeConverter fun plannedWorkout(value: String): PlannedWorkoutType = PlannedWorkoutType.valueOf(value)
 }

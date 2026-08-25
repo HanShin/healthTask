@@ -25,8 +25,8 @@ android {
         applicationId = "com.hanshin.healthtask"
         minSdk = 34
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 7
+        versionName = "1.3.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -59,8 +59,8 @@ android {
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (signingConfigs.findByName("release") != null) {
                 signingConfig = signingConfigs.getByName("release")
@@ -142,6 +142,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.8.4")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.health.connect:connect-client:1.1.0")
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")

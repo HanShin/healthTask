@@ -10,10 +10,12 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.DataOrigin
 import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.units.Length
 import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.request.ChangesTokenRequest
@@ -39,6 +41,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         HealthPermission.getReadPermission(WeightRecord::class),
         HealthPermission.getReadPermission(BodyFatRecord::class),
         HealthPermission.getReadPermission(DistanceRecord::class),
+        HealthPermission.getWritePermission(DistanceRecord::class),
         HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
         HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY,
     )
@@ -71,7 +74,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
     override suspend fun writeWorkout(summary: WorkoutSummary): String {
         check(status() == HealthConnectStatus.CONNECTED) { "Health Connect 권한이 필요합니다." }
         val zone = ZoneId.systemDefault().rules.getOffset(summary.startedAt)
-        val response = client.insertRecords(listOf(ExerciseSessionRecord(
+        val exerciseSession = ExerciseSessionRecord(
             startTime = summary.startedAt,
             startZoneOffset = zone,
             endTime = summary.endedAt,
@@ -86,7 +89,22 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
                 clientRecordId = summary.sessionId,
                 clientRecordVersion = 1,
             ),
-        )))
+        )
+        val records = mutableListOf<Record>(exerciseSession)
+        summary.distanceKm?.takeIf { it > 0.0 }?.let { distanceKm ->
+            records += DistanceRecord(
+                startTime = summary.startedAt,
+                startZoneOffset = zone,
+                endTime = summary.endedAt,
+                endZoneOffset = ZoneId.systemDefault().rules.getOffset(summary.endedAt),
+                distance = Length.kilometers(distanceKm),
+                metadata = Metadata.manualEntry(
+                    clientRecordId = "${summary.sessionId}-distance",
+                    clientRecordVersion = 1,
+                ),
+            )
+        }
+        val response = client.insertRecords(records)
         return response.recordIdsList.first()
     }
 

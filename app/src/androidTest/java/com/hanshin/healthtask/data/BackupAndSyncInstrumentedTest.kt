@@ -5,6 +5,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hanshin.healthtask.data.db.HealthTaskDatabase
+import com.hanshin.healthtask.data.db.ExerciseEntity
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionEntity
 import com.hanshin.healthtask.domain.ExerciseCategory
@@ -19,11 +20,13 @@ import com.hanshin.healthtask.health.HealthConnectStatus
 import com.hanshin.healthtask.health.HealthSyncManager
 import com.hanshin.healthtask.domain.ExternalWorkout
 import com.hanshin.healthtask.domain.NIKE_RUN_CLUB_PACKAGE
+import com.hanshin.healthtask.domain.PlannedWorkoutType
 import java.time.Instant
 import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutineExercise
 import com.hanshin.healthtask.shared.WearRoutineSet
+import com.hanshin.healthtask.shared.TABATA_EXERCISE_ID
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -45,6 +48,38 @@ class BackupAndSyncInstrumentedTest {
     }
 
     @After fun close() = database.close()
+
+    @Test fun tabataSeedIsAddedForExistingUsersAndAlwaysSavedAsFinisher() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        database.dao().upsertExercises(listOf(ExerciseEntity(
+            id = "custom-existing",
+            name = "기존 운동",
+            category = ExerciseCategory.WEIGHT,
+            recordMode = RecordMode.SETS,
+            isCustom = true,
+        )))
+
+        repository.initialize()
+        assertNotNull(database.dao().getExercises().firstOrNull { it.id == TABATA_EXERCISE_ID })
+        assertNotNull(database.dao().getExercises().firstOrNull { it.id == "custom-existing" })
+
+        repository.saveRoutine(
+            routineId = null,
+            name = "타바타 마무리",
+            exerciseIds = listOf(TABATA_EXERCISE_ID, "squat"),
+        )
+        val routine = database.dao().getRoutines().single()
+        assertEquals(
+            listOf("squat", TABATA_EXERCISE_ID),
+            routine.items.sortedBy { it.orderIndex }.map { it.exerciseId },
+        )
+
+        val sessionId = repository.startSession(routine.routine.id)
+        val tabata = database.dao().getSession(sessionId)!!.items.single {
+            it.item.exerciseId == TABATA_EXERCISE_ID
+        }
+        assertEquals(null, tabata.item.durationMin)
+    }
 
     @Test fun legacyV1ImportIsLosslessAndIdempotent() = runBlocking {
         val legacy = """
@@ -155,6 +190,7 @@ class BackupAndSyncInstrumentedTest {
         val workout = WearCompletedWorkout(
             sessionId = "wear-session-1",
             routineId = "routine-1",
+            planSlotId = "plan-slot-1",
             title = "워치 루틴",
             startedAt = 1_755_700_000_000,
             endedAt = 1_755_701_800_000,
@@ -177,7 +213,86 @@ class BackupAndSyncInstrumentedTest {
         assertEquals(1, database.dao().getSessions().count { it.session.id == "wear-session-1" })
         assertEquals(121.5, saved.session.averageHeartRateBpm!!, 0.01)
         assertEquals(SyncStatus.PENDING, saved.session.syncStatus)
+        assertEquals("plan-slot-1", saved.session.planSlotId)
         assertEquals(true, saved.items.single().sets.single().completed)
+    }
+
+    @Test fun onboardingCreatesPlanAndPlannedSessionsKeepTheirSlot() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        repository.initialize()
+        repository.finishOnboarding(workoutsPerWeek = 4, installTemplates = true)
+        val plan = database.dao().getTrainingPlans().single { it.plan.isActive }
+
+        assertEquals(4, plan.slots.size)
+        assertEquals(
+            listOf(
+                PlannedWorkoutType.STRENGTH,
+                PlannedWorkoutType.EASY_RUN,
+                PlannedWorkoutType.STRENGTH,
+                PlannedWorkoutType.QUALITY_RUN,
+            ),
+            plan.slots.sortedBy { it.orderIndex }.map { it.workoutType },
+        )
+
+        val strength = plan.slots.first { it.workoutType == PlannedWorkoutType.STRENGTH }
+        val strengthSessionId = repository.startSession(strength.routineId!!, strength.id)
+        assertEquals(strength.id, database.dao().getSession(strengthSessionId)!!.session.planSlotId)
+
+        val runSlot = plan.slots.first { it.workoutType == PlannedWorkoutType.EASY_RUN }
+        val startedAt = System.currentTimeMillis() - 30 * 60_000
+        val run = repository.savePhoneRun(
+            startedAt = startedAt,
+            endedAt = System.currentTimeMillis(),
+            elapsedMillis = 30 * 60_000,
+            distanceMeters = 5_000.0,
+            routePolyline = null,
+            lapData = null,
+            planSlotId = runSlot.id,
+        )
+        assertEquals(runSlot.id, run.planSlotId)
+        assertEquals("이지런", run.title)
+
+        val backup = BackupCodec(database).export()
+        assertEquals(true, backup.contains("\"schemaVersion\": 3"))
+        assertEquals(true, backup.contains("\"trainingPlans\""))
+        assertEquals(true, backup.contains("\"planSlots\""))
+    }
+
+    @Test fun watchRunImportKeepsDistanceActiveTimeAndAveragePace() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val workout = WearCompletedWorkout(
+            sessionId = "wear-run-1",
+            routineId = "planned-run-slot-run",
+            planSlotId = "slot-run",
+            title = "템포런",
+            startedAt = 1_755_700_000_000,
+            endedAt = 1_755_702_000_000,
+            exercises = listOf(WearRoutineExercise(
+                id = "slot-run-exercise",
+                exerciseId = "tempo-run",
+                name = "템포런",
+                order = 1,
+                recordMode = WearRecordMode.CARDIO,
+                category = ExerciseCategory.CARDIO.name,
+                durationMin = 25.0,
+                distanceKm = 5.0,
+            )),
+            averageHeartRateBpm = 155.0,
+            distanceKm = 5.0,
+            caloriesKcal = 320.0,
+            activeDurationMillis = 1_500_000L,
+            routePolyline = "37.566535,126.977969,0;37.567123,126.979321,5000",
+        )
+
+        assertEquals(true, repository.importWearWorkout(workout))
+        val saved = database.dao().getSession("wear-run-1")!!
+
+        assertEquals("slot-run", saved.session.planSlotId)
+        assertEquals(5.0, saved.session.distanceKm!!, 0.001)
+        assertEquals(1_500_000L, saved.session.activeDurationMillis)
+        assertEquals(workout.routePolyline, saved.session.routePolyline)
+        assertEquals(5.0, saved.items.single().item.avgPaceMinPerKm!!, 0.001)
+        assertEquals(WorkoutStatus.COMPLETED, saved.session.status)
     }
 }
 

@@ -6,6 +6,11 @@ import com.hanshin.healthtask.data.db.RoutineItemEntity
 import com.hanshin.healthtask.data.db.RoutineWithItems
 import com.hanshin.healthtask.domain.ExerciseCategory
 import com.hanshin.healthtask.domain.RecordMode
+import com.hanshin.healthtask.shared.TABATA_EXERCISE_ID
+import com.hanshin.healthtask.shared.TABATA_REST_SECONDS
+import com.hanshin.healthtask.shared.TABATA_ROUNDS
+import com.hanshin.healthtask.shared.TABATA_TOTAL_SECONDS
+import com.hanshin.healthtask.shared.TABATA_WORK_SECONDS
 
 object SeedData {
     private fun strength(
@@ -43,6 +48,18 @@ object SeedData {
         guideWarning = "통증이 느껴지면 속도와 거리를 줄이세요.",
         guideVideoUrl = video,
         guideAssetPath = "guides/running.svg",
+    )
+
+    private fun tabata() = ExerciseEntity(
+        id = TABATA_EXERCISE_ID,
+        name = "타바타 피니셔",
+        category = ExerciseCategory.CARDIO,
+        recordMode = RecordMode.CARDIO,
+        muscleGroup = "full-body",
+        equipment = "bodyweight",
+        guideHeadline = "20초 운동과 10초 휴식을 8라운드 반복하는 4분 마무리 운동입니다.",
+        guideCues = "버피·마운틴 클라이머·맨몸 스쿼트 중 하나를 선택\n20초 동안 자세를 유지하며 강하게 운동\n10초는 완전히 쉬고 다음 라운드를 준비",
+        guideWarning = "어지럼증이나 날카로운 통증이 느껴지면 즉시 중단하세요.",
     )
 
     val exercises: List<ExerciseEntity> = listOf(
@@ -111,6 +128,7 @@ object SeedData {
         cardio("easy-run", "가벼운 유산소", "호흡이 편한 강도로 부드럽게 움직입니다.", "https://www.youtube.com/watch?v=Ggbm_coe5uM"),
         cardio("tempo-run", "템포 유산소", "약간 숨찰 정도의 일정한 리듬을 유지합니다.", "https://www.youtube.com/watch?v=GpQ21f1b-cg"),
         cardio("long-run", "지구력 유산소", "지속 가능한 리듬으로 상체 힘을 빼고 움직입니다.", "https://www.youtube.com/watch?v=ewHVH6-udbg"),
+        tabata(),
     )
 
     private fun setItem(routineId: String, exerciseId: String, order: Int, sets: Int, reps: Int, weight: Double) =
@@ -141,6 +159,17 @@ object SeedData {
             targetPaceMinPerKm = minutes / km,
         )
 
+    private fun tabataItem(routineId: String, order: Int) = RoutineItemEntity(
+        id = "$routineId-$TABATA_EXERCISE_ID-$order",
+        routineId = routineId,
+        exerciseId = TABATA_EXERCISE_ID,
+        orderIndex = order,
+        category = ExerciseCategory.CARDIO,
+        recordMode = RecordMode.CARDIO,
+        targetActivityLabel = "${TABATA_WORK_SECONDS}초 운동 · ${TABATA_REST_SECONDS}초 휴식 × $TABATA_ROUNDS",
+        targetDurationMin = TABATA_TOTAL_SECONDS / 60.0,
+    )
+
     val templates: List<RoutineWithItems> = listOf(
         template("template-dumbbell-upper", "덤벨 밀기·당기기", listOf(
             setItem("template-dumbbell-upper", "flat-dumbbell-press", 1, 4, 8, 18.0),
@@ -170,6 +199,12 @@ object SeedData {
             setItem("template-dumbbell-hybrid", "flat-dumbbell-press", 2, 3, 10, 16.0),
             setItem("template-dumbbell-hybrid", "one-arm-dumbbell-row", 3, 3, 10, 16.0),
             cardioItem("template-dumbbell-hybrid", "easy-run", 4, 3.0, 20.0),
+        )),
+        template("template-strength-tabata", "근력 + 타바타 피니셔", listOf(
+            setItem("template-strength-tabata", "dumbbell-goblet-squat", 1, 3, 10, 18.0),
+            setItem("template-strength-tabata", "flat-dumbbell-press", 2, 3, 10, 16.0),
+            setItem("template-strength-tabata", "one-arm-dumbbell-row", 3, 3, 10, 16.0),
+            tabataItem("template-strength-tabata", 4),
         )),
     )
 

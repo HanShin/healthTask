@@ -56,6 +56,32 @@ interface HealthTaskDao {
     suspend fun deleteRoutine(routineId: String)
 
     @Transaction
+    @Query("SELECT * FROM training_plans ORDER BY isActive DESC, updatedAt DESC")
+    fun observeTrainingPlans(): Flow<List<TrainingPlanWithSlots>>
+
+    @Transaction
+    @Query("SELECT * FROM training_plans ORDER BY isActive DESC, updatedAt DESC")
+    suspend fun getTrainingPlans(): List<TrainingPlanWithSlots>
+
+    @Query("SELECT * FROM plan_slots WHERE id = :id LIMIT 1")
+    suspend fun getPlanSlot(id: String): PlanSlotEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTrainingPlan(plan: TrainingPlanEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPlanSlots(slots: List<PlanSlotEntity>)
+
+    @Query("DELETE FROM plan_slots WHERE planId = :planId")
+    suspend fun deletePlanSlots(planId: String)
+
+    @Query("UPDATE plan_slots SET routineId = NULL, title = '근력 루틴 필요' WHERE routineId = :routineId")
+    suspend fun detachRoutineFromPlanSlots(routineId: String)
+
+    @Query("UPDATE training_plans SET isActive = 0, updatedAt = :updatedAt")
+    suspend fun deactivateTrainingPlans(updatedAt: Long)
+
+    @Transaction
     @Query("SELECT * FROM workout_sessions ORDER BY sessionDate DESC, startedAt DESC")
     fun observeSessions(): Flow<List<WorkoutSessionWithItems>>
 
@@ -137,6 +163,8 @@ interface HealthTaskDao {
     @Query("DELETE FROM exercises") suspend fun clearExercises()
     @Query("DELETE FROM routines") suspend fun clearRoutines()
     @Query("DELETE FROM routine_items") suspend fun clearRoutineItems()
+    @Query("DELETE FROM training_plans") suspend fun clearTrainingPlans()
+    @Query("DELETE FROM plan_slots") suspend fun clearPlanSlots()
     @Query("DELETE FROM workout_sessions") suspend fun clearSessions()
     @Query("DELETE FROM workout_items") suspend fun clearWorkoutItems()
     @Query("DELETE FROM set_records") suspend fun clearSetRecords()

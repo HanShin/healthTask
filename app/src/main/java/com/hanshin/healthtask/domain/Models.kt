@@ -8,12 +8,16 @@ enum class SyncStatus { PENDING, SYNCED, ERROR }
 enum class ExerciseCategory { WEIGHT, BODYWEIGHT, CARDIO }
 enum class RecordMode { SETS, CARDIO }
 enum class WorkoutStatus { COMPLETED, PARTIAL, SKIPPED, ACTIVE }
+enum class TrainingGoalType { BALANCED, RUNNING, STRENGTH }
+enum class PlannedWorkoutType { STRENGTH, EASY_RUN, QUALITY_RUN, LONG_RUN }
 enum class HealthMetricType {
     WEIGHT_KG,
     BODY_FAT_PERCENT,
     BODY_FAT_MASS_KG,
     SKELETAL_MUSCLE_KG,
-    VISCERAL_FAT_LEVEL
+    BODY_WATER_L,
+    VISCERAL_FAT_LEVEL,
+    INBODY_SCORE,
 }
 
 data class ExternalWorkout(
@@ -43,6 +47,7 @@ data class WorkoutSummary(
     val category: ExerciseCategory,
     val startedAt: Instant,
     val endedAt: Instant,
+    val distanceKm: Double? = null,
 )
 
 data class WeeklyProgress(
@@ -53,6 +58,7 @@ data class WeeklyProgress(
 
 const val SAMSUNG_HEALTH_PACKAGE = "com.sec.android.app.shealth"
 const val NIKE_RUN_CLUB_PACKAGE = "com.nike.plusgps"
+const val INBODY_PACKAGE = "com.inbody2014.inbody"
 const val MIN_EXTERNAL_WORKOUT_MINUTES = 10L
 const val AUTO_LINK_OVERLAP_RATIO = 0.70
 

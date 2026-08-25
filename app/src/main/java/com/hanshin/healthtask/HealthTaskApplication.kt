@@ -8,6 +8,7 @@ import com.hanshin.healthtask.data.db.HealthTaskDatabase
 import com.hanshin.healthtask.health.AndroidHealthConnectGateway
 import com.hanshin.healthtask.health.HealthConnectGateway
 import com.hanshin.healthtask.health.HealthSyncManager
+import com.hanshin.healthtask.running.RunningTracker
 import com.hanshin.healthtask.wear.PhoneWatchGateway
 
 class HealthTaskApplication : Application() {
@@ -25,6 +26,8 @@ class HealthTaskApplication : Application() {
         private set
     lateinit var phoneWatchGateway: PhoneWatchGateway
         private set
+    lateinit var runningTracker: RunningTracker
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -35,5 +38,6 @@ class HealthTaskApplication : Application() {
         syncManager = HealthSyncManager(database, healthConnect, preferences)
         backupCodec = BackupCodec(database)
         phoneWatchGateway = PhoneWatchGateway(this)
+        runningTracker = RunningTracker(this)
     }
 }

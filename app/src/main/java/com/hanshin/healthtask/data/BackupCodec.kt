@@ -10,10 +10,12 @@ import com.hanshin.healthtask.data.db.ExerciseEntity
 import com.hanshin.healthtask.data.db.HealthMeasurementEntity
 import com.hanshin.healthtask.data.db.HealthTaskDatabase
 import com.hanshin.healthtask.data.db.ProfileEntity
+import com.hanshin.healthtask.data.db.PlanSlotEntity
 import com.hanshin.healthtask.data.db.RoutineEntity
 import com.hanshin.healthtask.data.db.RoutineItemEntity
 import com.hanshin.healthtask.data.db.SamsungWorkoutLinkEntity
 import com.hanshin.healthtask.data.db.SetRecordEntity
+import com.hanshin.healthtask.data.db.TrainingPlanEntity
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionEntity
 import com.hanshin.healthtask.domain.ExerciseCategory
@@ -27,8 +29,8 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-data class BackupV2(
-    val schemaVersion: Int = 2,
+data class BackupPayload(
+    val schemaVersion: Int = 3,
     val exportedAt: String = Instant.now().toString(),
     val profile: ProfileEntity?,
     val exercises: List<ExerciseEntity>,
@@ -39,6 +41,8 @@ data class BackupV2(
     val setRecords: List<SetRecordEntity>,
     val healthMeasurements: List<HealthMeasurementEntity>,
     val samsungWorkoutLinks: List<SamsungWorkoutLinkEntity>,
+    val trainingPlans: List<TrainingPlanEntity>? = null,
+    val planSlots: List<PlanSlotEntity>? = null,
 )
 
 data class ImportReport(
@@ -46,6 +50,7 @@ data class ImportReport(
     val routines: Int,
     val sessions: Int,
     val healthMeasurements: Int,
+    val trainingPlans: Int = 0,
 )
 
 class BackupCodec(private val database: HealthTaskDatabase) {
@@ -56,7 +61,8 @@ class BackupCodec(private val database: HealthTaskDatabase) {
         val routines = dao.getRoutines()
         val sessions = dao.getSessions().filterNot { it.session.source.isExternal() }
         val localIds = sessions.mapTo(mutableSetOf()) { it.session.id }
-        val payload = BackupV2(
+        val trainingPlans = dao.getTrainingPlans()
+        val payload = BackupPayload(
             profile = dao.getProfile(),
             exercises = dao.getExercises(),
             routines = routines.map { it.routine },
@@ -66,17 +72,19 @@ class BackupCodec(private val database: HealthTaskDatabase) {
             setRecords = sessions.flatMap { it.items }.flatMap { it.sets },
             healthMeasurements = dao.getHealthMeasurements().filterNot { it.source.isExternal() },
             samsungWorkoutLinks = dao.getWorkoutLinks().filter { it.localSessionId in localIds },
+            trainingPlans = trainingPlans.map { it.plan },
+            planSlots = trainingPlans.flatMap { it.slots },
         )
         return gson.toJson(payload)
     }
 
     suspend fun import(raw: String): ImportReport {
         val root = JsonParser.parseString(raw).asJsonObject
-        return if (root.int("schemaVersion") == 2) importV2(root) else importLegacy(root)
+        return if (root.int("schemaVersion") in 2..3) importModern(root) else importLegacy(root)
     }
 
-    private suspend fun importV2(root: JsonObject): ImportReport {
-        val payload = gson.fromJson(root, BackupV2::class.java)
+    private suspend fun importModern(root: JsonObject): ImportReport {
+        val payload = gson.fromJson(root, BackupPayload::class.java)
         database.withTransaction {
             val dao = database.dao()
             payload.profile?.let { dao.upsertProfile(it) }
@@ -88,8 +96,16 @@ class BackupCodec(private val database: HealthTaskDatabase) {
             if (payload.setRecords.isNotEmpty()) dao.upsertSetRecords(payload.setRecords)
             if (payload.healthMeasurements.isNotEmpty()) dao.upsertHealthMeasurements(payload.healthMeasurements)
             payload.samsungWorkoutLinks.forEach { dao.upsertWorkoutLink(it) }
+            payload.trainingPlans.orEmpty().forEach { dao.upsertTrainingPlan(it) }
+            if (payload.planSlots.orEmpty().isNotEmpty()) dao.upsertPlanSlots(payload.planSlots.orEmpty())
         }
-        return ImportReport(2, payload.routines.size, payload.sessions.size, payload.healthMeasurements.size)
+        return ImportReport(
+            root.int("schemaVersion") ?: 2,
+            payload.routines.size,
+            payload.sessions.size,
+            payload.healthMeasurements.size,
+            payload.trainingPlans.orEmpty().size,
+        )
     }
 
     private suspend fun importLegacy(root: JsonObject): ImportReport {

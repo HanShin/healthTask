@@ -7,8 +7,10 @@ import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.hanshin.healthtask.domain.ExerciseCategory
 import com.hanshin.healthtask.domain.HealthMetricType
+import com.hanshin.healthtask.domain.PlannedWorkoutType
 import com.hanshin.healthtask.domain.RecordMode
 import com.hanshin.healthtask.domain.SyncStatus
+import com.hanshin.healthtask.domain.TrainingGoalType
 import com.hanshin.healthtask.domain.WorkoutSource
 import com.hanshin.healthtask.domain.WorkoutStatus
 
@@ -67,13 +69,40 @@ data class RoutineItemEntity(
     val note: String? = null,
 )
 
+@Entity(tableName = "training_plans", indices = [Index("isActive")])
+data class TrainingPlanEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val goalType: TrainingGoalType,
+    val isActive: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(tableName = "plan_slots", indices = [Index("planId"), Index("routineId")])
+data class PlanSlotEntity(
+    @PrimaryKey val id: String,
+    val planId: String,
+    val orderIndex: Int,
+    val workoutType: PlannedWorkoutType,
+    val routineId: String? = null,
+    val title: String,
+    val preferredDayOfWeek: Int? = null,
+    val targetDurationMin: Double? = null,
+    val targetDistanceKm: Double? = null,
+    val targetPaceMinPerKm: Double? = null,
+    val note: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
 @Entity(
     tableName = "workout_sessions",
-    indices = [Index("sessionDate"), Index("routineId"), Index("source"), Index(value = ["healthConnectRecordId"], unique = true)]
+    indices = [Index("sessionDate"), Index("routineId"), Index("planSlotId"), Index("source"), Index(value = ["healthConnectRecordId"], unique = true)]
 )
 data class WorkoutSessionEntity(
     @PrimaryKey val id: String,
     val routineId: String? = null,
+    val planSlotId: String? = null,
     val title: String,
     val sessionDate: String,
     val status: WorkoutStatus,
@@ -86,6 +115,9 @@ data class WorkoutSessionEntity(
     val distanceKm: Double? = null,
     val caloriesKcal: Double? = null,
     val averageHeartRateBpm: Double? = null,
+    val routePolyline: String? = null,
+    val lapData: String? = null,
+    val activeDurationMillis: Long? = null,
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val syncError: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
@@ -159,6 +191,11 @@ data class SyncStateEntity(
 data class RoutineWithItems(
     @Embedded val routine: RoutineEntity,
     @Relation(parentColumn = "id", entityColumn = "routineId") val items: List<RoutineItemEntity>,
+)
+
+data class TrainingPlanWithSlots(
+    @Embedded val plan: TrainingPlanEntity,
+    @Relation(parentColumn = "id", entityColumn = "planId") val slots: List<PlanSlotEntity>,
 )
 
 data class WorkoutItemWithSets(

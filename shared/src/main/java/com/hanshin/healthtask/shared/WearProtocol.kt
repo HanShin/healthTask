@@ -8,17 +8,26 @@ object WearPaths {
 }
 
 enum class WearRecordMode { SETS, CARDIO }
+enum class WearSensorMode { RUNNING, STRENGTH }
 
 const val DEFAULT_REST_TIMER_SECONDS = 90
 
 data class WearRoutinePayload(
-    val schemaVersion: Int = 2,
+    val schemaVersion: Int = 4,
     val routineId: String,
+    val planSlotId: String? = null,
     val title: String,
     val exercises: List<WearRoutineExercise>,
     val updatedAt: Long,
     val restTimerSeconds: Int = DEFAULT_REST_TIMER_SECONDS,
+    val sensorMode: WearSensorMode? = null,
 )
+
+val WearRoutinePayload.usesGpsRunning: Boolean
+    get() = sensorMode == WearSensorMode.RUNNING ||
+        (sensorMode == null && exercises.isNotEmpty() && exercises.all {
+            it.recordMode == WearRecordMode.CARDIO && it.category == "CARDIO"
+        })
 
 data class WearRoutineExercise(
     val id: String,
@@ -30,8 +39,12 @@ data class WearRoutineExercise(
     val sets: List<WearRoutineSet> = emptyList(),
     val targetDurationMin: Double? = null,
     val targetDistanceKm: Double? = null,
+    val targetPaceMinPerKm: Double? = null,
     val durationMin: Double? = null,
     val distanceKm: Double? = null,
+    val intervalWorkSeconds: Int? = null,
+    val intervalRestSeconds: Int? = null,
+    val intervalRounds: Int? = null,
 )
 
 data class WearRoutineSet(
@@ -63,9 +76,10 @@ fun remainingRestSeconds(restEndsAt: Long?, now: Long = System.currentTimeMillis
 }
 
 data class WearCompletedWorkout(
-    val schemaVersion: Int = 1,
+    val schemaVersion: Int = 4,
     val sessionId: String,
     val routineId: String,
+    val planSlotId: String? = null,
     val title: String,
     val startedAt: Long,
     val endedAt: Long,
@@ -73,4 +87,6 @@ data class WearCompletedWorkout(
     val averageHeartRateBpm: Double? = null,
     val distanceKm: Double? = null,
     val caloriesKcal: Double? = null,
+    val activeDurationMillis: Long? = null,
+    val routePolyline: String? = null,
 )
