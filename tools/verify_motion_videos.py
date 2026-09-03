@@ -7,7 +7,27 @@ import struct
 from pathlib import Path
 
 
-EXPECTED_FILES = 12
+EXPECTED_EXERCISES = (
+    "squat",
+    "flat_dumbbell_press",
+    "one_arm_dumbbell_row",
+    "shoulder_press",
+    "hammer_curl",
+    "dumbbell_goblet_squat",
+    "dumbbell_romanian_deadlift",
+    "dumbbell_bulgarian_split_squat",
+    "plank",
+    "push_up",
+    "tabata_burpee",
+    "tabata_mountain_climber",
+    "tabata_bodyweight_squat",
+)
+EXPECTED_FILES = {
+    f"{exercise}_{angle}.mp4"
+    for exercise in EXPECTED_EXERCISES
+    for angle in ("front", "side")
+}
+EXPECTED_FILE_COUNT = 26
 EXPECTED_CODEC = "avc1"
 EXPECTED_DURATION = 8.0
 EXPECTED_FRAMES = 240
@@ -130,8 +150,22 @@ def main():
     args = parser.parse_args()
     paths = sorted(args.directory.glob("*.mp4"))
     failures = []
-    if len(paths) != EXPECTED_FILES:
-        failures.append(f"expected {EXPECTED_FILES} MP4 files, found {len(paths)}")
+    actual_files = {path.name for path in paths}
+    if len(EXPECTED_FILES) != EXPECTED_FILE_COUNT:
+        failures.append(
+            f"verifier expected-set mismatch: "
+            f"{len(EXPECTED_FILES)} names for count {EXPECTED_FILE_COUNT}"
+        )
+    if len(actual_files) != EXPECTED_FILE_COUNT:
+        failures.append(
+            f"expected {EXPECTED_FILE_COUNT} MP4 files, found {len(actual_files)}"
+        )
+    missing = sorted(EXPECTED_FILES - actual_files)
+    unexpected = sorted(actual_files - EXPECTED_FILES)
+    if missing:
+        failures.append(f"missing MP4 files: {', '.join(missing)}")
+    if unexpected:
+        failures.append(f"unexpected MP4 files: {', '.join(unexpected)}")
 
     for path in paths:
         try:

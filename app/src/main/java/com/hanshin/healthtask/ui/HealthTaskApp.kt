@@ -106,6 +106,8 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -1057,36 +1059,13 @@ private fun NumberField(
 
 @Composable
 private fun GuideDialog(exercise: ExerciseEntity?, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
-    var motionAngle by rememberSaveable(exercise?.id) { mutableStateOf("front") }
-    val motionResource = when (exercise?.id) {
-        "squat" -> if (motionAngle == "front") R.raw.squat_front else R.raw.squat_side
-        "flat-dumbbell-press" -> if (motionAngle == "front") {
-            R.raw.flat_dumbbell_press_front
-        } else {
-            R.raw.flat_dumbbell_press_side
-        }
-        "one-arm-dumbbell-row" -> if (motionAngle == "front") {
-            R.raw.one_arm_dumbbell_row_front
-        } else {
-            R.raw.one_arm_dumbbell_row_side
-        }
-        "shoulder-press" -> if (motionAngle == "front") {
-            R.raw.shoulder_press_front
-        } else {
-            R.raw.shoulder_press_side
-        }
-        "hammer-curl" -> if (motionAngle == "front") {
-            R.raw.hammer_curl_front
-        } else {
-            R.raw.hammer_curl_side
-        }
-        "dumbbell-goblet-squat" -> if (motionAngle == "front") {
-            R.raw.dumbbell_goblet_squat_front
-        } else {
-            R.raw.dumbbell_goblet_squat_side
-        }
-        else -> null
-    }
+    var motionAngleId by rememberSaveable(exercise?.id) { mutableStateOf(GuideMotionAngle.FRONT.id) }
+    var tabataMovementId by rememberSaveable(exercise?.id) { mutableStateOf(TabataGuideMovement.BURPEE.id) }
+    val motionAngle = GuideMotionAngle.fromId(motionAngleId)
+    val tabataMovement = TabataGuideMovement.fromId(tabataMovementId)
+    val isTabata = exercise?.id == TABATA_EXERCISE_ID
+    val motionDescriptor = guideMotionDescriptor(exercise?.id, motionAngle, tabataMovement)
+    val motionResource = motionDescriptor?.rawResourceName?.let(::guideMotionResourceId)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(exercise?.name ?: "운동 가이드") },
@@ -1096,13 +1075,65 @@ private fun GuideDialog(exercise: ExerciseEntity?, onDismiss: () -> Unit, onOpen
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (motionResource != null) {
-                    Text("3D 모션 샘플", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        AssistChip(onClick = { motionAngle = "front" }, label = { Text(if (motionAngle == "front") "✓ 정면" else "정면") })
-                        AssistChip(onClick = { motionAngle = "side" }, label = { Text(if (motionAngle == "side") "✓ 측면" else "측면") })
+                    Text(
+                        if (isTabata) "타바타 동작 가이드" else "3D 모션 샘플",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (isTabata) {
+                        Text("동작 선택", style = MaterialTheme.typography.labelMedium)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            TabataGuideMovement.entries.forEach { movement ->
+                                FilterChip(
+                                    selected = movement == tabataMovement,
+                                    onClick = { tabataMovementId = movement.id },
+                                    label = { Text(movement.label) },
+                                    modifier = Modifier.semantics {
+                                        contentDescription = "${movement.label} 동작 선택"
+                                    },
+                                )
+                            }
+                        }
+                        Text("시점 선택", style = MaterialTheme.typography.labelMedium)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            GuideMotionAngle.entries.forEach { angle ->
+                                FilterChip(
+                                    selected = angle == motionAngle,
+                                    onClick = { motionAngleId = angle.id },
+                                    label = { Text(angle.label) },
+                                    modifier = Modifier.semantics {
+                                        contentDescription = "${angle.label} 시점 선택"
+                                    },
+                                )
+                            }
+                        }
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            AssistChip(
+                                onClick = { motionAngleId = GuideMotionAngle.FRONT.id },
+                                label = { Text(if (motionAngle == GuideMotionAngle.FRONT) "✓ 정면" else "정면") },
+                            )
+                            AssistChip(
+                                onClick = { motionAngleId = GuideMotionAngle.SIDE.id },
+                                label = { Text(if (motionAngle == GuideMotionAngle.SIDE) "✓ 측면" else "측면") },
+                            )
+                        }
                     }
-                    MotionGuidePlayer(motionResource)
-                    Text("오프라인 3D 가이드 · 자동 반복", style = MaterialTheme.typography.labelSmall)
+                    MotionGuidePlayer(
+                        resourceId = motionResource,
+                        accessibilityLabel = checkNotNull(motionDescriptor).accessibilityLabel,
+                    )
+                    Text(
+                        if (isTabata) {
+                            "${tabataMovement.label} · ${motionAngle.label} · 오프라인 3D 가이드 · 자동 반복"
+                        } else {
+                            "오프라인 3D 가이드 · 자동 반복"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                    )
                 } else exercise?.guideAssetPath?.let { asset ->
                     AndroidView(
                         factory = { context -> android.webkit.WebView(context).apply { settings.javaScriptEnabled = false } },
@@ -1122,9 +1153,39 @@ private fun GuideDialog(exercise: ExerciseEntity?, onDismiss: () -> Unit, onOpen
     )
 }
 
+private fun guideMotionResourceId(rawResourceName: String): Int? = when (rawResourceName) {
+    "squat_front" -> R.raw.squat_front
+    "squat_side" -> R.raw.squat_side
+    "flat_dumbbell_press_front" -> R.raw.flat_dumbbell_press_front
+    "flat_dumbbell_press_side" -> R.raw.flat_dumbbell_press_side
+    "one_arm_dumbbell_row_front" -> R.raw.one_arm_dumbbell_row_front
+    "one_arm_dumbbell_row_side" -> R.raw.one_arm_dumbbell_row_side
+    "shoulder_press_front" -> R.raw.shoulder_press_front
+    "shoulder_press_side" -> R.raw.shoulder_press_side
+    "hammer_curl_front" -> R.raw.hammer_curl_front
+    "hammer_curl_side" -> R.raw.hammer_curl_side
+    "dumbbell_goblet_squat_front" -> R.raw.dumbbell_goblet_squat_front
+    "dumbbell_goblet_squat_side" -> R.raw.dumbbell_goblet_squat_side
+    "dumbbell_romanian_deadlift_front" -> R.raw.dumbbell_romanian_deadlift_front
+    "dumbbell_romanian_deadlift_side" -> R.raw.dumbbell_romanian_deadlift_side
+    "dumbbell_bulgarian_split_squat_front" -> R.raw.dumbbell_bulgarian_split_squat_front
+    "dumbbell_bulgarian_split_squat_side" -> R.raw.dumbbell_bulgarian_split_squat_side
+    "plank_front" -> R.raw.plank_front
+    "plank_side" -> R.raw.plank_side
+    "push_up_front" -> R.raw.push_up_front
+    "push_up_side" -> R.raw.push_up_side
+    "tabata_burpee_front" -> R.raw.tabata_burpee_front
+    "tabata_burpee_side" -> R.raw.tabata_burpee_side
+    "tabata_mountain_climber_front" -> R.raw.tabata_mountain_climber_front
+    "tabata_mountain_climber_side" -> R.raw.tabata_mountain_climber_side
+    "tabata_bodyweight_squat_front" -> R.raw.tabata_bodyweight_squat_front
+    "tabata_bodyweight_squat_side" -> R.raw.tabata_bodyweight_squat_side
+    else -> null
+}
+
 @Composable
 @androidx.annotation.OptIn(UnstableApi::class)
-private fun MotionGuidePlayer(resourceId: Int) {
+private fun MotionGuidePlayer(resourceId: Int, accessibilityLabel: String) {
     val context = LocalContext.current
     val player = remember(context) {
         ExoPlayer.Builder(context).build().apply {
@@ -1152,7 +1213,10 @@ private fun MotionGuidePlayer(resourceId: Int) {
             }
         },
         update = { it.player = player },
-        modifier = Modifier.fillMaxWidth().height(260.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(260.dp)
+            .semantics { contentDescription = accessibilityLabel },
     )
 }
 

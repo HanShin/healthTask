@@ -20,7 +20,7 @@
 - 완료한 로컬 운동 요약과 GPS 러닝 거리를 Health Connect에 쓰기
 - 같은 날짜·호환 운동·70% 이상 시간 중첩 시 로컬/외부 기록 자동 연결
 - 오프라인 SVG 운동 가이드와 외부 YouTube 링크
-- 스쿼트·플랫 덤벨 프레스·원암 덤벨 로우·숄더프레스·해머 컬·덤벨 고블릿 스쿼트 정면/측면 사람형 3D 모션 가이드와 자동 반복 재생
+- 스쿼트·플랫 덤벨 프레스·원암 덤벨 로우·숄더프레스·해머 컬·덤벨 고블릿 스쿼트·덤벨 루마니안 데드리프트·덤벨 불가리안 스플릿 스쿼트·플랭크·푸시업과 타바타 3동작의 정면/측면 사람형 3D 모션 가이드 및 자동 반복 재생
 - Galaxy Watch용 Wear OS 앱과 다음 계획 러닝·웨이트 자동 전송
 - 워치 홈의 `바로 운동`으로 종목 선택 없이 일반 운동을 기록하고, 빠른 러닝에서 자유 러닝·30분·5km 러닝을 폰 없이 시작
 - 워치의 오프라인 세트·횟수·중량 기록 및 진행 중 세션 복원
@@ -51,7 +51,7 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 
 ## 3D 운동 모션 가이드
 
-완성된 6개 운동 가이드(바벨 스쿼트, 플랫 덤벨 프레스, 원암 덤벨 로우, 숄더프레스, 해머 컬, 덤벨 고블릿 스쿼트)는 각각 APK에 포함된 정면·측면 H.264 영상을 Media3로 무음 자동 반복합니다. 앱에서 운동 이름 옆 가이드 아이콘을 누른 뒤 `정면 / 측면`을 선택하면 됩니다. 네트워크는 필요하지 않습니다.
+제작된 13개 동작 가이드(바벨 스쿼트, 플랫 덤벨 프레스, 원암 덤벨 로우, 숄더프레스, 해머 컬, 덤벨 고블릿 스쿼트, 덤벨 루마니안 데드리프트, 덤벨 불가리안 스플릿 스쿼트, 플랭크, 푸시업, 로우 임팩트 버피, 마운틴 클라이머, 맨몸 스쿼트)는 APK에 포함된 정면·측면 H.264 영상 26개를 Media3로 무음 자동 반복합니다. 일반 운동은 가이드에서 `정면 / 측면`을 선택하고, 타바타 피니셔는 먼저 세 동작 중 하나를 고른 뒤 시점을 선택합니다. 네트워크는 필요하지 않습니다.
 
 모션은 실제 하이바 백스쿼트의 [측면 자세](https://www.youtube.com/shorts/KqbKmBSDVS4)와 [정면·사선 튜토리얼](https://www.youtube.com/shorts/lHyQ4Jy0LSA)을 시각 레퍼런스로 삼아 새로 제작했습니다. 영상 자체는 복제하거나 앱에 포함하지 않았습니다. 발 고정, 무릎의 발끝 방향 진행, 골반의 후하방 이동, 중립 척추, 바벨의 발 중앙 수직 경로와 손 그립을 독립 제어합니다.
 
@@ -62,6 +62,14 @@ export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 원암 덤벨 로우는 왼손·왼무릎·오른발의 세 지점을 고정하고 오른팔만 당기는 단측 모션입니다. 원본은 `design/motion/one_arm_dumbbell_row_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_one_arm_dumbbell_row.py`, 동작 정의는 `docs/motions/ONE_ARM_DUMBBELL_ROW.md`에 있습니다.
 
 숄더프레스와 해머 컬도 같은 사람형·스튜디오·덤벨 규격을 사용합니다. 덤벨 고블릿 스쿼트는 승인된 스쿼트 하체 제어를 보존하고 양손으로 수직 덤벨의 위쪽 원판을 받치는 동작이며, 원본은 `design/motion/dumbbell_goblet_squat_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_dumbbell_goblet_squat.py`, 동작 정의는 `docs/motions/DUMBBELL_GOBLET_SQUAT.md`에 있습니다.
+
+덤벨 루마니안 데드리프트는 무릎 굽힘을 약 18도로 유지한 채 고관절에서 접고, 손등이 정면을 향하는 오버핸드 그립으로 덤벨을 허벅지·정강이 앞 가까이 상부 정강이까지 내리는 힙힌지 모션입니다. 전 프레임 발 고정·무릎·중립 척추·팔꿈치·손가락 접촉·덤벨 경로·루프와 장비 충돌 검사를 수행하며, 원본은 `design/motion/dumbbell_romanian_deadlift_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_dumbbell_romanian_deadlift.py`, 동작 정의는 `docs/motions/DUMBBELL_ROMANIAN_DEADLIFT.md`에 있습니다.
+
+덤벨 불가리안 스플릿 스쿼트는 앞발 전체를 고정하고 반대쪽 발등을 벤치에 둔 채, 몸통을 세우고 앞 허벅지가 바닥과 거의 평행해질 때까지 내려가는 단측 모션입니다. 뒷발 방향·발등 접촉, 앞무릎 정렬, 골반 수평, 양손 뉴트럴 그립과 장비 충돌을 전 프레임 검증하며, 원본은 `design/motion/dumbbell_bulgarian_split_squat_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_dumbbell_bulgarian_split_squat.py`, 동작 정의는 `docs/motions/DUMBBELL_BULGARIAN_SPLIT_SQUAT.md`에 있습니다.
+
+푸시업은 양 손바닥과 양발 앞꿈치를 고정하고 몸통을 한 단위로 내렸다 올리는 8초·2회 루프입니다. 손가락과 실제 손바닥의 접촉 영역을 분리해 뒤꿈치·검지 쪽·소지 쪽 패드의 접지를 전 프레임 검사합니다. 원본은 `design/motion/push_up_human_sample.blend`, 생성 코드는 `tools/blender/generate_human_push_up.py`, 자세·접촉 기준과 손끝 지지 회귀 검수 기록은 `docs/motions/PUSH_UP.md`에 있습니다.
+
+타바타 피니셔의 20초 운동·10초 휴식·8라운드 타이머는 휴대폰과 워치가 직접 실행합니다. 영상은 푸시업·수직 점프를 생략한 로우 임팩트 버피, 자세 확인용 컨트롤 마운틴 클라이머, 맨몸 스쿼트의 8초 루프이며, 생성 코드와 동작별 검수 기준은 `tools/blender/generate_human_tabata_*.py`와 `docs/motions/TABATA_FINISHER.md`에 있습니다.
 
 ```bash
 # 6개 자세와 3개 그립 근접 화면을 먼저 생성
