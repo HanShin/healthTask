@@ -2,6 +2,7 @@ package com.hanshin.healthtask.shared
 
 object WearPaths {
     const val TODAY_ROUTINE = "/today-routine"
+    const val START_WORKOUT_PREFIX = "/start-workout/"
     const val COMPLETED_WORKOUT_PREFIX = "/completed-workout/"
     const val KEY_JSON = "json"
     const val KEY_UPDATED_AT = "updatedAt"
@@ -22,6 +23,26 @@ data class WearRoutinePayload(
     val restTimerSeconds: Int = DEFAULT_REST_TIMER_SECONDS,
     val sensorMode: WearSensorMode? = null,
 )
+
+data class WearStartWorkoutRequest(
+    val schemaVersion: Int = 1,
+    val requestId: String,
+    val sessionId: String,
+    val routine: WearRoutinePayload,
+    val requestedAt: Long,
+    val expiresAt: Long,
+) {
+    fun isExpired(now: Long = System.currentTimeMillis()): Boolean = now >= expiresAt
+
+    fun isValid(now: Long = System.currentTimeMillis()): Boolean = runCatching {
+        schemaVersion == 1 &&
+            requestId.isNotBlank() && '/' !in requestId &&
+            sessionId.isNotBlank() &&
+            requestedAt >= 0L && expiresAt > requestedAt &&
+            routine.routineId.isNotBlank() && routine.title.isNotBlank() &&
+            !isExpired(now)
+    }.getOrDefault(false)
+}
 
 val WearRoutinePayload.usesGpsRunning: Boolean
     get() = sensorMode == WearSensorMode.RUNNING ||

@@ -165,6 +165,9 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
         val now = System.currentTimeMillis()
         val previous = dao.getSessions()
         database.withTransaction {
+            require(dao.getSessions().none { it.session.status == WorkoutStatus.ACTIVE }) {
+                "진행 중인 근력운동을 먼저 완료해 주세요."
+            }
             dao.upsertSession(
                 WorkoutSessionEntity(
                     id = sessionId,
@@ -214,23 +217,37 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
         return sessionId
     }
 
-    suspend fun updateSet(set: SetRecordEntity) = dao.upsertSetRecords(listOf(set))
-    suspend fun updateWorkoutItem(item: WorkoutItemEntity) = dao.upsertWorkoutItems(listOf(item))
+    suspend fun updateSet(set: SetRecordEntity) = database.withTransaction {
+        val sessionId = dao.getSessionIdForWorkoutItem(set.workoutItemId) ?: return@withTransaction
+        val session = dao.getSession(sessionId)?.session ?: return@withTransaction
+        if (session.status != WorkoutStatus.ACTIVE || session.memo == WATCH_WORKOUT_MEMO) return@withTransaction
+        dao.upsertSetRecords(listOf(set))
+    }
 
-    suspend fun finishSession(sessionId: String): WorkoutSessionEntity {
+    suspend fun updateWorkoutItem(item: WorkoutItemEntity) = database.withTransaction {
+        val session = dao.getSession(item.sessionId)?.session ?: return@withTransaction
+        if (session.status != WorkoutStatus.ACTIVE || session.memo == WATCH_WORKOUT_MEMO) return@withTransaction
+        dao.upsertWorkoutItems(listOf(item))
+    }
+
+    suspend fun finishSession(sessionId: String): WorkoutSessionEntity = database.withTransaction {
         val full = requireNotNull(dao.getSession(sessionId))
-        val status = workoutStatus(full.items)
+        if (full.session.status != WorkoutStatus.ACTIVE || full.session.memo == WATCH_WORKOUT_MEMO) {
+            return@withTransaction full.session
+        }
+        val now = System.currentTimeMillis()
         val updated = full.session.copy(
-            status = status,
-            endedAt = System.currentTimeMillis(),
+            status = workoutStatus(full.items),
+            endedAt = now,
             syncStatus = SyncStatus.PENDING,
-            updatedAt = System.currentTimeMillis(),
+            updatedAt = now,
         )
         dao.updateSession(updated)
-        return updated
+        updated
     }
 
     suspend fun savePhoneRun(
+        sessionId: String = "run-${UUID.randomUUID()}",
         startedAt: Long,
         endedAt: Long,
         elapsedMillis: Long,
@@ -239,38 +256,49 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
         lapData: String?,
         planSlotId: String? = null,
     ): WorkoutSessionEntity {
+        require(sessionId.isNotBlank()) { "러닝 세션 ID가 필요합니다." }
         require(endedAt >= startedAt) { "러닝 시간이 올바르지 않습니다." }
         require(elapsedMillis >= 1_000L) { "1초 이상 기록한 뒤 완료해 주세요." }
-        val sessionId = "run-${UUID.randomUUID()}"
         val distanceKm = distanceMeters.coerceAtLeast(0.0) / 1_000.0
         val durationMinutes = elapsedMillis / 60_000.0
         val sessionDate = Instant.ofEpochMilli(startedAt)
             .atZone(ZoneId.systemDefault()).toLocalDate().toString()
-        val planSlot = planSlotId?.let { requireNotNull(dao.getPlanSlot(it)) { "계획 러닝을 찾을 수 없습니다." } }
+        val planSlot = planSlotId?.let { dao.getPlanSlot(it) }
         require(planSlot == null || planSlot.workoutType.isRun) { "러닝 계획만 GPS 기록과 연결할 수 있습니다." }
         val exerciseId = when (planSlot?.workoutType) {
             PlannedWorkoutType.QUALITY_RUN -> "tempo-run"
             PlannedWorkoutType.LONG_RUN -> "long-run"
             else -> "easy-run"
         }
-        val session = WorkoutSessionEntity(
+        val phoneSession = WorkoutSessionEntity(
             id = sessionId,
-            planSlotId = planSlotId,
+            planSlotId = planSlot?.id,
             title = planSlot?.title ?: "러닝",
             sessionDate = sessionDate,
             status = WorkoutStatus.COMPLETED,
             source = WorkoutSource.LOCAL,
             startedAt = startedAt,
             endedAt = endedAt,
-            memo = "휴대폰 GPS로 기록",
+            memo = PHONE_RUN_MEMO,
             distanceKm = distanceKm,
             routePolyline = routePolyline,
             lapData = lapData,
             activeDurationMillis = elapsedMillis,
             syncStatus = SyncStatus.PENDING,
         )
+        var savedSession = phoneSession
         database.withTransaction {
-            dao.upsertSession(session)
+            val existing = dao.getSession(sessionId)?.session
+            savedSession = phoneSession.copy(
+                caloriesKcal = existing?.caloriesKcal,
+                averageHeartRateBpm = existing?.averageHeartRateBpm,
+                distanceKm = distanceKm.takeIf { it > 0.0 } ?: existing?.distanceKm,
+                routePolyline = routePolyline?.takeIf { it.isNotBlank() } ?: existing?.routePolyline,
+                createdAt = existing?.createdAt ?: phoneSession.createdAt,
+            )
+            dao.deleteSetsForSession(sessionId)
+            dao.deleteItemsForSession(sessionId)
+            dao.upsertSession(savedSession)
             dao.upsertWorkoutItems(listOf(WorkoutItemEntity(
                 id = "$sessionId-running",
                 sessionId = sessionId,
@@ -280,12 +308,12 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
                 category = ExerciseCategory.CARDIO,
                 recordMode = RecordMode.CARDIO,
                 activityLabel = planSlot?.title ?: "GPS 러닝",
-                distanceKm = distanceKm,
+                distanceKm = savedSession.distanceKm,
                 durationMin = durationMinutes,
-                avgPaceMinPerKm = distanceKm.takeIf { it > 0.02 }?.let { durationMinutes / it },
+                avgPaceMinPerKm = savedSession.distanceKm?.takeIf { it > 0.02 }?.let { durationMinutes / it },
             )))
         }
-        return session
+        return savedSession
     }
 
     suspend fun deleteSession(id: String) = database.withTransaction {
@@ -461,7 +489,6 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
 
     /** Imports a completed watch workout exactly once, even if the Data Layer retries delivery. */
     suspend fun importWearWorkout(workout: WearCompletedWorkout): Boolean {
-        if (dao.getSession(workout.sessionId) != null) return false
         require(workout.endedAt >= workout.startedAt) { "워치 운동 시간이 올바르지 않습니다." }
         val sessionDate = Instant.ofEpochMilli(workout.startedAt)
             .atZone(ZoneId.systemDefault()).toLocalDate().toString()
@@ -478,8 +505,49 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
         }
         var imported = false
         database.withTransaction {
-            if (dao.getSession(workout.sessionId) != null) return@withTransaction
+            val existing = dao.getSession(workout.sessionId)
+            if (existing != null && workout.isPhoneStartedRun()) {
+                val current = existing.session
+                val mergedDistance = current.distanceKm?.takeIf { it > 0.0 } ?: workout.distanceKm
+                val mergedRoute = current.routePolyline?.takeIf { it.isNotBlank() } ?: workout.routePolyline
+                val mergedDuration = current.activeDurationMillis?.takeIf { it > 0L } ?: workout.activeDurationMillis
+                val merged = current.copy(
+                    distanceKm = mergedDistance,
+                    caloriesKcal = workout.caloriesKcal ?: current.caloriesKcal,
+                    averageHeartRateBpm = workout.averageHeartRateBpm ?: current.averageHeartRateBpm,
+                    routePolyline = mergedRoute,
+                    activeDurationMillis = mergedDuration,
+                )
+                val mergedItems = existing.items.map { itemWithSets ->
+                    val item = itemWithSets.item
+                    if (item.recordMode != RecordMode.CARDIO) item else {
+                        val durationMinutes = mergedDuration?.div(60_000.0) ?: item.durationMin
+                        item.copy(
+                            distanceKm = mergedDistance,
+                            durationMin = durationMinutes,
+                            avgPaceMinPerKm = mergedDistance?.takeIf { it > 0.02 }
+                                ?.let { distance -> durationMinutes?.div(distance) },
+                        )
+                    }
+                }
+                val childrenChanged = mergedItems.zip(existing.items).any { (updated, original) ->
+                    updated != original.item
+                }
+                if (merged != current || childrenChanged) {
+                    imported = true
+                    dao.updateSession(merged.copy(
+                        syncStatus = SyncStatus.PENDING,
+                        syncError = null,
+                        updatedAt = System.currentTimeMillis(),
+                    ))
+                    if (childrenChanged) dao.upsertWorkoutItems(mergedItems)
+                }
+                return@withTransaction
+            }
+            if (existing?.session?.memo == WATCH_WORKOUT_MEMO) return@withTransaction
             imported = true
+            dao.deleteSetsForSession(workout.sessionId)
+            dao.deleteItemsForSession(workout.sessionId)
             dao.upsertSession(WorkoutSessionEntity(
                 id = workout.sessionId,
                 routineId = workout.routineId,
@@ -490,13 +558,14 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
                 source = WorkoutSource.LOCAL,
                 startedAt = workout.startedAt,
                 endedAt = workout.endedAt,
-                memo = "Galaxy Watch에서 기록",
+                memo = WATCH_WORKOUT_MEMO,
                 distanceKm = workout.distanceKm,
                 caloriesKcal = workout.caloriesKcal,
                 averageHeartRateBpm = workout.averageHeartRateBpm,
                 routePolyline = workout.routePolyline,
                 activeDurationMillis = workout.activeDurationMillis,
                 syncStatus = SyncStatus.PENDING,
+                createdAt = existing?.session?.createdAt ?: System.currentTimeMillis(),
             ))
             workout.exercises.sortedBy { it.order }.forEach { exercise ->
                 val itemId = "${workout.sessionId}-item-${exercise.order}"
@@ -534,5 +603,14 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
             }
         }
         return imported
+    }
+
+    private fun WearCompletedWorkout.isPhoneStartedRun(): Boolean =
+        sessionId.startsWith("run-") && exercises.isNotEmpty() &&
+            exercises.all { it.recordMode == WearRecordMode.CARDIO }
+
+    private companion object {
+        const val PHONE_RUN_MEMO = "휴대폰 GPS로 기록"
+        const val WATCH_WORKOUT_MEMO = "Galaxy Watch에서 기록"
     }
 }

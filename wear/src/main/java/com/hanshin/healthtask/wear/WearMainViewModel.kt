@@ -19,6 +19,7 @@ import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutinePayload
 import com.hanshin.healthtask.shared.WearRoutineSet
 import com.hanshin.healthtask.shared.WearRouteCodec
+import com.hanshin.healthtask.shared.WearStartWorkoutRequest
 import com.hanshin.healthtask.shared.elapsedMillis
 import com.hanshin.healthtask.shared.isTabata
 import com.hanshin.healthtask.shared.remainingRestSeconds
@@ -32,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
@@ -39,6 +41,7 @@ import kotlinx.coroutines.launch
 
 data class WearUiState(
     val routine: WearRoutinePayload? = null,
+    val pendingStartRequest: WearStartWorkoutRequest? = null,
     val active: WearActiveSession? = null,
     val metrics: WearMetrics = WearMetrics(),
     val restRemainingSeconds: Int = 0,
@@ -48,28 +51,66 @@ data class WearUiState(
     val currentExercise get() = active?.exercises?.getOrNull(active.currentExerciseIndex)
 }
 
+internal data class PendingWorkoutStart(
+    val routine: WearRoutinePayload,
+    val sessionId: String? = null,
+    val requestId: String? = null,
+)
+
+private data class WearTransientUiState(
+    val restRemainingSeconds: Int,
+    val tabataTimer: TabataTimerState,
+    val message: String?,
+)
+
 class WearMainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as WatchApplication
     private val restRemainingSeconds = MutableStateFlow(0)
     private val tabataTimer = MutableStateFlow(TabataTimerState())
     private val message = MutableStateFlow<String?>(null)
+    private val _pendingPermissionStart = MutableStateFlow<PendingWorkoutStart?>(null)
+    internal val pendingPermissionStart = _pendingPermissionStart.asStateFlow()
     private var tabataTimerJob: Job? = null
     private var tabataPausedByWorkout = false
+    private var workoutStartInProgress = false
+
+    private val transientUiState = combine(restRemainingSeconds, tabataTimer, message) { rest, tabata, currentMessage ->
+        WearTransientUiState(rest, tabata, currentMessage)
+    }
 
     val state: StateFlow<WearUiState> = combine(
         app.store.routine,
+        app.store.pendingStartRequest,
         app.store.activeSession,
         WearMetricsRepository.metrics,
-        combine(restRemainingSeconds, tabataTimer) { rest, tabata -> rest to tabata },
-        message,
-    ) { routine, active, metrics, timers, currentMessage ->
-        WearUiState(routine, active, metrics, timers.first, timers.second, currentMessage)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), WearUiState())
+        transientUiState,
+    ) { routine, pendingStartRequest, active, metrics, transient ->
+        WearUiState(
+            routine = routine,
+            pendingStartRequest = pendingStartRequest,
+            active = active,
+            metrics = metrics,
+            restRemainingSeconds = transient.restRemainingSeconds,
+            tabataTimer = transient.tabataTimer,
+            message = transient.message,
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, WearUiState())
 
     init {
         viewModelScope.launch {
             runCatching { app.dataGateway.readLatestRoutine() }
                 .getOrNull()?.let { app.store.saveRoutine(it) }
+        }
+        refreshStartRequest()
+        viewModelScope.launch {
+            app.store.pendingStartRequest.collectLatest { request ->
+                request ?: return@collectLatest
+                delay(startRequestExpiryDelayMillis(request, System.currentTimeMillis()))
+                viewModelScope.launch {
+                    app.store.clearPendingStartRequest(request.requestId)
+                    runCatching { app.dataGateway.consumeStartRequest(request.requestId) }
+                }
+            }
         }
         viewModelScope.launch {
             app.store.activeSession.collectLatest { active ->
@@ -93,34 +134,106 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun startWorkout(routine: WearRoutinePayload, trackSensors: Boolean) = viewModelScope.launch {
-        val usesGpsRunning = routine.usesGpsRunning
-        if (usesGpsRunning && !trackSensors) {
-            message.value = "러닝 기록에는 위치·활동·심박 권한이 필요합니다."
-            return@launch
+    fun refreshStartRequest(expectedRequestId: String? = null) = viewModelScope.launch {
+        val attempts = if (expectedRequestId == null) 1 else 4
+        repeat(attempts) { attempt ->
+            val request = runCatching { app.dataGateway.readLatestStartRequest() }.getOrNull()
+            if (request != null && (expectedRequestId == null || request.requestId == expectedRequestId)) {
+                app.store.savePendingStartRequest(request)
+                return@launch
+            }
+            if (attempt < attempts - 1) delay(250L)
         }
-        val active = WearActiveSession(
-            sessionId = "wear-session-${UUID.randomUUID()}",
-            routine = routine,
-            startedAt = System.currentTimeMillis(),
-            exercises = routine.exercises.map { exercise ->
-                exercise.copy(
-                    sets = exercise.sets.map { it.copy(completed = false) },
-                    durationMin = null,
-                    distanceKm = null,
-                )
-            },
+    }
+
+    internal fun deferWorkoutStartForPermissions(start: PendingWorkoutStart): Boolean {
+        if (_pendingPermissionStart.value != null) return false
+        _pendingPermissionStart.value = start
+        return true
+    }
+
+    fun completePendingPermissionStart(trackSensors: Boolean) {
+        val start = _pendingPermissionStart.value ?: return
+        _pendingPermissionStart.value = null
+        startWorkout(
+            routine = start.routine,
+            trackSensors = trackSensors,
+            sessionId = start.sessionId,
+            requestId = start.requestId,
         )
-        stopTabataTimer()
-        app.store.saveActiveSession(active)
-        if (trackSensors) {
-            ContextCompat.startForegroundService(
-                app,
-                WearExerciseService.command(app, WearExerciseService.ACTION_START, usesGpsRunning),
-            )
-        } else {
-            message.value = "센서 권한 없이 운동 기록을 시작했습니다."
+    }
+
+    fun startWorkout(
+        routine: WearRoutinePayload,
+        trackSensors: Boolean,
+        sessionId: String? = null,
+        requestId: String? = null,
+    ) {
+        if (workoutStartInProgress) return
+        workoutStartInProgress = true
+        viewModelScope.launch {
+            try {
+                val candidate = PendingWorkoutStart(routine, sessionId, requestId)
+                val currentState = state.value
+                if (!isWorkoutStartCurrent(candidate, currentState.active, currentState.pendingStartRequest)) {
+                    if (currentState.active != null) {
+                        message.value = "이미 진행 중인 운동이 있습니다."
+                    } else if (requestId != null) {
+                        message.value = "운동 시작 요청이 만료되었거나 변경됐습니다."
+                        currentState.pendingStartRequest
+                            ?.takeIf { it.requestId == requestId && !it.isValid() }
+                            ?.let {
+                                consumeAndClearStartRequest(it.requestId)
+                            }
+                    }
+                    return@launch
+                }
+                val usesGpsRunning = routine.usesGpsRunning
+                if (usesGpsRunning && !trackSensors) {
+                    message.value = "러닝 기록에는 위치·활동·심박 권한이 필요합니다."
+                    return@launch
+                }
+                val active = WearActiveSession(
+                    sessionId = sessionId?.takeIf { it.isNotBlank() } ?: "wear-session-${UUID.randomUUID()}",
+                    routine = routine,
+                    startedAt = System.currentTimeMillis(),
+                    exercises = routine.exercises.map { exercise ->
+                        exercise.copy(
+                            sets = exercise.sets.map { it.copy(completed = false) },
+                            durationMin = null,
+                            distanceKm = null,
+                        )
+                    },
+                )
+                stopTabataTimer()
+                app.store.saveActiveSession(active)
+                if (trackSensors) {
+                    val serviceStarted = runCatching {
+                        ContextCompat.startForegroundService(
+                            app,
+                            WearExerciseService.command(app, WearExerciseService.ACTION_START, usesGpsRunning),
+                        )
+                    }.getOrNull() != null
+                    if (!serviceStarted) {
+                        app.store.clearActiveSession()
+                        message.value = "운동 센서 서비스를 시작하지 못했습니다. 다시 시도해 주세요."
+                        return@launch
+                    }
+                } else {
+                    message.value = "센서 권한 없이 운동 기록을 시작했습니다."
+                }
+                requestId?.let { consumeAndClearStartRequest(it) }
+            } finally {
+                workoutStartInProgress = false
+            }
         }
+    }
+
+    fun declineStartRequest(requestId: String) = viewModelScope.launch {
+        val pendingRequest = state.value.pendingStartRequest
+        if (pendingRequest?.requestId != requestId) return@launch
+        consumeAndClearStartRequest(requestId)
+        message.value = "휴대폰에서 운동을 계속합니다."
     }
 
     fun toggleSet(order: Int) = viewModelScope.launch {
@@ -294,6 +407,14 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
 
     fun consumeMessage() { message.value = null }
 
+    private suspend fun consumeAndClearStartRequest(requestId: String) {
+        val consumeFailure = runCatching { app.dataGateway.consumeStartRequest(requestId) }.exceptionOrNull()
+        app.store.clearPendingStartRequest(requestId)
+        if (consumeFailure != null) {
+            message.value = "운동 요청 동기화를 마치지 못했습니다."
+        }
+    }
+
     private fun signalRestComplete() {
         val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             app.getSystemService(VibratorManager::class.java)?.defaultVibrator
@@ -356,6 +477,24 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
             app.store.saveActiveSession(transform(active))
         }
     }
+}
+
+internal fun startRequestExpiryDelayMillis(
+    request: WearStartWorkoutRequest,
+    now: Long = System.currentTimeMillis(),
+): Long = (request.expiresAt - now).coerceAtLeast(0L)
+
+internal fun isWorkoutStartCurrent(
+    candidate: PendingWorkoutStart,
+    active: WearActiveSession?,
+    pendingRequest: WearStartWorkoutRequest?,
+    now: Long = System.currentTimeMillis(),
+): Boolean {
+    if (active != null) return false
+    val liveRequest = pendingRequest?.takeIf { it.isValid(now) }
+    if (candidate.requestId == null) return candidate.sessionId == null && liveRequest == null
+    if (candidate.sessionId.isNullOrBlank()) return false
+    return liveRequest?.requestId == candidate.requestId && liveRequest.sessionId == candidate.sessionId
 }
 
 private fun WearActiveSession.updateCurrentExercise(

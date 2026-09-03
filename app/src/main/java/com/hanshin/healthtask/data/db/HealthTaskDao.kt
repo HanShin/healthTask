@@ -93,6 +93,9 @@ interface HealthTaskDao {
     @Query("SELECT * FROM workout_sessions WHERE id = :id LIMIT 1")
     suspend fun getSession(id: String): WorkoutSessionWithItems?
 
+    @Query("SELECT sessionId FROM workout_items WHERE id = :workoutItemId LIMIT 1")
+    suspend fun getSessionIdForWorkoutItem(workoutItemId: String): String?
+
     @Query("SELECT * FROM workout_sessions WHERE healthConnectRecordId = :recordId LIMIT 1")
     suspend fun getSessionByHealthRecord(recordId: String): WorkoutSessionEntity?
 

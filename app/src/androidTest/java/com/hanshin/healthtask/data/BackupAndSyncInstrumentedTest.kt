@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.hanshin.healthtask.data.db.HealthTaskDatabase
 import com.hanshin.healthtask.data.db.ExerciseEntity
+import com.hanshin.healthtask.data.db.SetRecordEntity
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionEntity
 import com.hanshin.healthtask.domain.ExerciseCategory
@@ -215,6 +216,241 @@ class BackupAndSyncInstrumentedTest {
         assertEquals(SyncStatus.PENDING, saved.session.syncStatus)
         assertEquals("plan-slot-1", saved.session.planSlotId)
         assertEquals(true, saved.items.single().sets.single().completed)
+    }
+
+    @Test fun watchWorkoutCompletesAndReplacesMatchingActivePhoneSession() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val dao = database.dao()
+        dao.upsertSession(WorkoutSessionEntity(
+            id = "shared-session",
+            routineId = "routine-1",
+            title = "진행 중 루틴",
+            sessionDate = "2026-08-21",
+            status = WorkoutStatus.ACTIVE,
+            source = WorkoutSource.LOCAL,
+            startedAt = 1_755_700_000_000,
+        ))
+        dao.upsertWorkoutItems(listOf(WorkoutItemEntity(
+            id = "old-item",
+            sessionId = "shared-session",
+            exerciseId = "old-exercise",
+            exerciseName = "이전 운동",
+            orderIndex = 1,
+            category = ExerciseCategory.WEIGHT,
+            recordMode = RecordMode.SETS,
+        )))
+        dao.upsertSetRecords(listOf(SetRecordEntity(
+            id = "old-set",
+            workoutItemId = "old-item",
+            orderIndex = 1,
+        )))
+        val workout = WearCompletedWorkout(
+            sessionId = "shared-session",
+            routineId = "routine-1",
+            planSlotId = null,
+            title = "완료 루틴",
+            startedAt = 1_755_700_000_000,
+            endedAt = 1_755_701_800_000,
+            exercises = listOf(WearRoutineExercise(
+                id = "watch-item",
+                exerciseId = "squat",
+                name = "스쿼트",
+                order = 1,
+                recordMode = WearRecordMode.SETS,
+                category = ExerciseCategory.WEIGHT.name,
+                sets = listOf(WearRoutineSet(1, reps = 12, weightKg = 45.0, completed = true)),
+            )),
+            averageHeartRateBpm = 128.0,
+        )
+
+        assertEquals(true, repository.importWearWorkout(workout))
+        assertEquals(false, repository.importWearWorkout(workout))
+        repository.finishSession("shared-session")
+        repository.updateWorkoutItem(WorkoutItemEntity(
+            id = "old-item",
+            sessionId = "shared-session",
+            exerciseId = "old-exercise",
+            exerciseName = "늦게 도착한 폰 수정",
+            orderIndex = 1,
+            category = ExerciseCategory.WEIGHT,
+            recordMode = RecordMode.SETS,
+        ))
+        repository.updateSet(SetRecordEntity(
+            id = "late-old-set",
+            workoutItemId = "old-item",
+            orderIndex = 1,
+            actualReps = 99,
+            completed = true,
+        ))
+
+        val saved = dao.getSession("shared-session")!!
+        assertEquals(WorkoutStatus.COMPLETED, saved.session.status)
+        assertEquals("완료 루틴", saved.session.title)
+        assertEquals(128.0, saved.session.averageHeartRateBpm!!, 0.001)
+        assertEquals(1, saved.items.size)
+        assertEquals("squat", saved.items.single().item.exerciseId)
+        assertEquals(12, saved.items.single().sets.single().actualReps)
+    }
+
+    @Test fun savingPhoneRunAgainReplacesChildrenUnderTheSameSessionId() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val startedAt = 1_755_700_000_000
+
+        repository.savePhoneRun(
+            sessionId = "phone-run-session",
+            startedAt = startedAt,
+            endedAt = startedAt + 30 * 60_000,
+            elapsedMillis = 30 * 60_000,
+            distanceMeters = 5_000.0,
+            routePolyline = "first-route",
+            lapData = null,
+        )
+        repository.savePhoneRun(
+            sessionId = "phone-run-session",
+            startedAt = startedAt,
+            endedAt = startedAt + 31 * 60_000,
+            elapsedMillis = 31 * 60_000,
+            distanceMeters = 5_500.0,
+            routePolyline = "replacement-route",
+            lapData = null,
+        )
+
+        val saved = database.dao().getSession("phone-run-session")!!
+        assertEquals(1, database.dao().getSessions().count { it.session.id == "phone-run-session" })
+        assertEquals(1, saved.items.size)
+        assertEquals(5.5, saved.session.distanceKm!!, 0.001)
+        assertEquals("replacement-route", saved.session.routePolyline)
+    }
+
+    @Test fun watchMetricsMergeIntoCompletedPhoneRunWithoutReplacingPhoneRoute() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val startedAt = 1_755_700_000_000
+        repository.savePhoneRun(
+            sessionId = "run-shared-session",
+            startedAt = startedAt,
+            endedAt = startedAt + 30 * 60_000,
+            elapsedMillis = 30 * 60_000,
+            distanceMeters = 5_000.0,
+            routePolyline = "phone-route",
+            lapData = "phone-laps",
+        )
+        val watchWorkout = WearCompletedWorkout(
+            sessionId = "run-shared-session",
+            routineId = "free-run",
+            title = "자유 러닝",
+            startedAt = startedAt,
+            endedAt = startedAt + 29 * 60_000,
+            exercises = listOf(WearRoutineExercise(
+                id = "watch-run",
+                exerciseId = "easy-run",
+                name = "자유 러닝",
+                order = 1,
+                recordMode = WearRecordMode.CARDIO,
+                category = ExerciseCategory.CARDIO.name,
+                durationMin = 29.0,
+                distanceKm = 4.8,
+            )),
+            averageHeartRateBpm = 142.0,
+            caloriesKcal = 321.0,
+            distanceKm = 4.8,
+            activeDurationMillis = 29 * 60_000L,
+            routePolyline = "watch-route",
+        )
+
+        assertEquals(true, repository.importWearWorkout(watchWorkout))
+        assertEquals(false, repository.importWearWorkout(watchWorkout))
+
+        val saved = database.dao().getSession("run-shared-session")!!
+        assertEquals(5.0, saved.session.distanceKm!!, 0.001)
+        assertEquals("phone-route", saved.session.routePolyline)
+        assertEquals("phone-laps", saved.session.lapData)
+        assertEquals(142.0, saved.session.averageHeartRateBpm!!, 0.001)
+        assertEquals(321.0, saved.session.caloriesKcal!!, 0.001)
+        assertEquals(5.0, saved.items.single().item.distanceKm!!, 0.001)
+    }
+
+    @Test fun phoneRunSavePreservesWatchMetricsWhenWatchArrivesFirst() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val startedAt = 1_755_700_000_000
+        val watchWorkout = WearCompletedWorkout(
+            sessionId = "run-watch-first",
+            routineId = "free-run",
+            title = "자유 러닝",
+            startedAt = startedAt,
+            endedAt = startedAt + 20 * 60_000,
+            exercises = listOf(WearRoutineExercise(
+                id = "watch-run",
+                exerciseId = "easy-run",
+                name = "자유 러닝",
+                order = 1,
+                recordMode = WearRecordMode.CARDIO,
+                category = ExerciseCategory.CARDIO.name,
+                durationMin = 20.0,
+                distanceKm = 3.0,
+            )),
+            averageHeartRateBpm = 135.0,
+            caloriesKcal = 210.0,
+            distanceKm = 3.0,
+            routePolyline = "watch-route",
+        )
+
+        assertEquals(true, repository.importWearWorkout(watchWorkout))
+        repository.savePhoneRun(
+            sessionId = "run-watch-first",
+            startedAt = startedAt,
+            endedAt = startedAt + 21 * 60_000,
+            elapsedMillis = 21 * 60_000,
+            distanceMeters = 3_200.0,
+            routePolyline = "phone-route",
+            lapData = "phone-laps",
+        )
+
+        val saved = database.dao().getSession("run-watch-first")!!
+        assertEquals(3.2, saved.session.distanceKm!!, 0.001)
+        assertEquals("phone-route", saved.session.routePolyline)
+        assertEquals(135.0, saved.session.averageHeartRateBpm!!, 0.001)
+        assertEquals(210.0, saved.session.caloriesKcal!!, 0.001)
+        assertEquals(false, repository.importWearWorkout(watchWorkout))
+    }
+
+    @Test fun watchCompletionReplacesAlreadyCompletedPhoneStrengthOnlyOnce() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val dao = database.dao()
+        val startedAt = 1_755_700_000_000
+        dao.upsertSession(WorkoutSessionEntity(
+            id = "shared-finished-strength",
+            routineId = "routine-1",
+            title = "폰에서 완료한 루틴",
+            sessionDate = "2026-08-21",
+            status = WorkoutStatus.COMPLETED,
+            source = WorkoutSource.LOCAL,
+            startedAt = startedAt,
+            endedAt = startedAt + 10 * 60_000,
+        ))
+        val watchWorkout = WearCompletedWorkout(
+            sessionId = "shared-finished-strength",
+            routineId = "routine-1",
+            title = "워치에서 완료한 루틴",
+            startedAt = startedAt,
+            endedAt = startedAt + 12 * 60_000,
+            exercises = listOf(WearRoutineExercise(
+                id = "watch-item",
+                exerciseId = "deadlift",
+                name = "데드리프트",
+                order = 1,
+                recordMode = WearRecordMode.SETS,
+                category = ExerciseCategory.WEIGHT.name,
+                sets = listOf(WearRoutineSet(1, reps = 5, weightKg = 80.0, completed = true)),
+            )),
+            averageHeartRateBpm = 126.0,
+        )
+
+        assertEquals(true, repository.importWearWorkout(watchWorkout))
+        assertEquals(false, repository.importWearWorkout(watchWorkout))
+        val saved = dao.getSession("shared-finished-strength")!!
+        assertEquals("워치에서 완료한 루틴", saved.session.title)
+        assertEquals("deadlift", saved.items.single().item.exerciseId)
+        assertEquals(126.0, saved.session.averageHeartRateBpm!!, 0.001)
     }
 
     @Test fun onboardingCreatesPlanAndPlannedSessionsKeepTheirSlot() = runBlocking {

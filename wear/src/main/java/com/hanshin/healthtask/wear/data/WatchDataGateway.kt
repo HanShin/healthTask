@@ -10,6 +10,7 @@ import com.google.gson.Gson
 import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearPaths
 import com.hanshin.healthtask.shared.WearRoutinePayload
+import com.hanshin.healthtask.shared.WearStartWorkoutRequest
 import kotlinx.coroutines.tasks.await
 
 class WatchDataGateway(context: Context) {
@@ -28,7 +29,7 @@ class WatchDataGateway(context: Context) {
 
     suspend fun readLatestRoutine(): WearRoutinePayload? {
         val items = dataClient.getDataItems(
-            "wear:${WearPaths.TODAY_ROUTINE}".toUri(),
+            "wear://*${WearPaths.TODAY_ROUTINE}".toUri(),
             DataClient.FILTER_LITERAL,
         ).await()
         return try {
@@ -39,5 +40,32 @@ class WatchDataGateway(context: Context) {
         } finally {
             items.release()
         }
+    }
+
+    suspend fun readLatestStartRequest(now: Long = System.currentTimeMillis()): WearStartWorkoutRequest? {
+        val items = dataClient.getDataItems(
+            "wear://*${WearPaths.START_WORKOUT_PREFIX}".toUri(),
+            DataClient.FILTER_PREFIX,
+        ).await()
+        return try {
+            items.asSequence()
+                .mapNotNull { item ->
+                    val json = runCatching {
+                        DataMapItem.fromDataItem(item).dataMap.getString(WearPaths.KEY_JSON)
+                    }.getOrNull()
+                    decodeStartWorkoutRequest(json, item.uri.path, now, gson)
+                }
+                .maxWithOrNull(compareBy<WearStartWorkoutRequest> { it.requestedAt }.thenBy { it.requestId })
+        } finally {
+            items.release()
+        }
+    }
+
+    suspend fun consumeStartRequest(requestId: String) {
+        require(requestId.isNotBlank() && '/' !in requestId) { "Invalid workout start request ID." }
+        dataClient.deleteDataItems(
+            "wear://*${WearPaths.START_WORKOUT_PREFIX}$requestId".toUri(),
+            DataClient.FILTER_LITERAL,
+        ).await()
     }
 }

@@ -2,6 +2,7 @@ package com.hanshin.healthtask.running
 
 import android.content.Context
 import java.util.Locale
+import java.util.UUID
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +40,7 @@ sealed interface RunningEvent {
 }
 
 data class RunningUiState(
+    val sessionId: String? = null,
     val phase: RunningPhase = RunningPhase.IDLE,
     val plannedSlotId: String? = null,
     val startedAt: Long? = null,
@@ -69,6 +71,7 @@ data class RunningUiState(
 }
 
 data class CompletedRun(
+    val sessionId: String,
     val plannedSlotId: String?,
     val startedAt: Long,
     val endedAt: Long,
@@ -102,8 +105,13 @@ class RunningTracker(context: Context) {
         }
     }
 
-    fun start(plannedSlotId: String? = null, now: Long = System.currentTimeMillis()) {
+    fun start(
+        sessionId: String,
+        plannedSlotId: String? = null,
+        now: Long = System.currentTimeMillis(),
+    ) {
         if (mutableState.value.isActive) return
+        require(sessionId.isNotBlank()) { "러닝 세션 ID가 필요합니다." }
         activeSince = now
         accumulatedElapsed = 0L
         lastSample = null
@@ -111,6 +119,7 @@ class RunningTracker(context: Context) {
         stationarySinceWallTime = null
         update(
             RunningUiState(
+                sessionId = sessionId,
                 phase = RunningPhase.ACQUIRING_GPS,
                 plannedSlotId = plannedSlotId,
                 startedAt = now,
@@ -147,6 +156,7 @@ class RunningTracker(context: Context) {
 
     fun finish(now: Long = System.currentTimeMillis()): CompletedRun? {
         val current = mutableState.value
+        val sessionId = current.sessionId ?: return null
         val startedAt = current.startedAt ?: return null
         if (!current.isActive) return null
         accumulatedElapsed = elapsedAt(now)
@@ -162,7 +172,16 @@ class RunningTracker(context: Context) {
             laps = laps,
         )
         update(completed)
-        return CompletedRun(completed.plannedSlotId, startedAt, now, accumulatedElapsed, completed.distanceMeters, completed.route, laps)
+        return CompletedRun(
+            sessionId = sessionId,
+            plannedSlotId = completed.plannedSlotId,
+            startedAt = startedAt,
+            endedAt = now,
+            elapsedMillis = accumulatedElapsed,
+            distanceMeters = completed.distanceMeters,
+            route = completed.route,
+            laps = laps,
+        )
     }
 
     fun reset() {
@@ -329,6 +348,7 @@ class RunningTracker(context: Context) {
     private fun update(value: RunningUiState) {
         mutableState.value = value
         preferences.edit()
+            .putString(KEY_SESSION_ID, value.sessionId)
             .putString(KEY_PHASE, value.phase.name)
             .putString(KEY_PLANNED_SLOT_ID, value.plannedSlotId)
             .putLong(KEY_STARTED_AT, value.startedAt ?: -1L)
@@ -354,6 +374,7 @@ class RunningTracker(context: Context) {
             restoredActiveSince?.let { (System.currentTimeMillis() - it).coerceAtLeast(0L) } ?: 0L
         } else 0L
         return RunningUiState(
+            sessionId = preferences.getString(KEY_SESSION_ID, null) ?: "run-${UUID.randomUUID()}",
             phase = phase,
             plannedSlotId = preferences.getString(KEY_PLANNED_SLOT_ID, null),
             startedAt = preferences.longOrNull(KEY_STARTED_AT),
@@ -371,6 +392,7 @@ class RunningTracker(context: Context) {
 
     private companion object {
         const val PREFERENCES = "running_tracker"
+        const val KEY_SESSION_ID = "session_id"
         const val KEY_PHASE = "phase"
         const val KEY_PLANNED_SLOT_ID = "planned_slot_id"
         const val KEY_STARTED_AT = "started_at"

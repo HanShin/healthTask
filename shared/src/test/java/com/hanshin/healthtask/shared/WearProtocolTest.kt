@@ -1,7 +1,9 @@
 package com.hanshin.healthtask.shared
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class WearProtocolTest {
@@ -73,6 +75,22 @@ class WearProtocolTest {
         assertEquals(WearRecordMode.CARDIO, workout.exercises.single().recordMode)
         assertEquals("WEIGHT", workout.exercises.single().category)
         assertNull(workout.planSlotId)
+    }
+
+    @Test fun `start request validates identity payload and expiry`() {
+        val request = WearStartWorkoutRequest(
+            requestId = "start-session-1",
+            sessionId = "session-1",
+            routine = routine,
+            requestedAt = 1_000L,
+            expiresAt = 2_000L,
+        )
+
+        assertTrue(request.isValid(now = 1_999L))
+        assertFalse(request.isValid(now = 2_000L))
+        assertFalse(request.copy(requestId = "nested/id").isValid(now = 1_500L))
+        assertFalse(request.copy(schemaVersion = 2).isValid(now = 1_500L))
+        assertFalse(request.copy(expiresAt = request.requestedAt).isValid(now = 1_000L))
     }
 
     @Test fun `watch route codec is compact and ignores invalid points`() {

@@ -75,7 +75,9 @@ class RunningTrackingService : Service(), LocationListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_START -> tracker.start(intent.getStringExtra(EXTRA_PLAN_SLOT_ID))
+            ACTION_START -> intent.getStringExtra(EXTRA_SESSION_ID)?.let { sessionId ->
+                tracker.start(sessionId, intent.getStringExtra(EXTRA_PLAN_SLOT_ID))
+            }
             ACTION_PAUSE -> tracker.pause()
             ACTION_RESUME -> tracker.resume()
             ACTION_STOP -> {
@@ -222,12 +224,18 @@ class RunningTrackingService : Service(), LocationListener {
         private const val ACTION_PAUSE = "com.hanshin.healthtask.running.PAUSE"
         private const val ACTION_RESUME = "com.hanshin.healthtask.running.RESUME"
         private const val ACTION_STOP = "com.hanshin.healthtask.running.STOP"
+        private const val EXTRA_SESSION_ID = "session_id"
         private const val EXTRA_PLAN_SLOT_ID = "plan_slot_id"
 
-        fun start(context: Context, planSlotId: String? = null) = ContextCompat.startForegroundService(
+        fun start(
+            context: Context,
+            sessionId: String,
+            planSlotId: String? = null,
+        ) = ContextCompat.startForegroundService(
             context,
             Intent(context, RunningTrackingService::class.java)
                 .setAction(ACTION_START)
+                .putExtra(EXTRA_SESSION_ID, sessionId)
                 .putExtra(EXTRA_PLAN_SLOT_ID, planSlotId),
         )
 

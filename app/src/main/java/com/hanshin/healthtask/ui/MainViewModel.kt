@@ -49,8 +49,13 @@ import com.hanshin.healthtask.shared.TABATA_TOTAL_SECONDS
 import com.hanshin.healthtask.shared.TabataPhase
 import com.hanshin.healthtask.shared.TabataTimer
 import com.hanshin.healthtask.shared.TabataTimerState
+import com.hanshin.healthtask.shared.WearStartWorkoutRequest
+import com.hanshin.healthtask.shared.WearQuickRunPreset
 import com.hanshin.healthtask.shared.remainingRestSeconds
+import com.hanshin.healthtask.shared.toRoutinePayload
+import com.hanshin.healthtask.wear.buildWearRoutinePayload
 import java.time.LocalDate
+import java.util.UUID
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -249,7 +254,36 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startSession(routineId: String, planSlotId: String? = null) = launchAction {
         stopRestTimer()
         stopTabataTimer()
-        repository.startSession(routineId, planSlotId)
+        val sessionId = repository.startSession(routineId, planSlotId)
+        val current = state.value
+        val routine = current.routines.firstOrNull { it.routine.id == routineId }
+        val plannedSlot = planSlotId?.let { id ->
+            current.trainingPlans.asSequence()
+                .flatMap { it.slots.asSequence() }
+                .firstOrNull { it.id == id }
+        }
+        val payload = buildWearRoutinePayload(
+            routine = routine,
+            plannedSlot = plannedSlot,
+            exercises = current.exercises,
+            sessions = current.sessions,
+            restTimerSeconds = current.restTimerSeconds,
+        )
+        if (payload != null) {
+            val requestedAt = System.currentTimeMillis()
+            val watchOpened = app.phoneWatchGateway.requestWorkoutStart(
+                WearStartWorkoutRequest(
+                    requestId = "start-$sessionId",
+                    sessionId = sessionId,
+                    routine = payload,
+                    requestedAt = requestedAt,
+                    expiresAt = requestedAt + WATCH_START_REQUEST_TTL_MILLIS,
+                ),
+            )
+            if (!watchOpened) {
+                message.value = "폰 운동은 시작했습니다. 연결된 워치에서는 운동 앱을 직접 열어 주세요."
+            }
+        }
     }
 
     fun selectPlanSlot(slot: PlanSlotEntity) {
@@ -324,7 +358,49 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             message.value = "진행 중인 근력운동을 먼저 완료해 주세요."
             return
         }
-        RunningTrackingService.start(app, planSlotId)
+        if (app.runningTracker.state.value.isActive) return
+        val sessionId = "run-${UUID.randomUUID()}"
+        app.runningTracker.start(sessionId, planSlotId)
+        val serviceStarted = runCatching {
+            RunningTrackingService.start(app, sessionId, planSlotId)
+        }.getOrNull() != null
+        if (!serviceStarted) {
+            if (app.runningTracker.state.value.sessionId == sessionId) app.runningTracker.reset()
+            message.value = "러닝 기록 서비스를 시작하지 못했습니다. 다시 시도해 주세요."
+            return
+        }
+        val current = state.value
+        val requestedAt = System.currentTimeMillis()
+        viewModelScope.launch {
+            runCatching {
+                val payload = if (planSlotId == null) {
+                    WearQuickRunPreset.FREE_RUN.toRoutinePayload(updatedAt = requestedAt)
+                } else {
+                    buildWearRoutinePayload(
+                        routine = null,
+                        plannedSlot = repository.getPlanSlot(planSlotId),
+                        exercises = current.exercises,
+                        sessions = current.sessions,
+                        restTimerSeconds = current.restTimerSeconds,
+                        updatedAt = requestedAt,
+                    )
+                }
+                val watchOpened = payload != null && app.phoneWatchGateway.requestWorkoutStart(
+                        WearStartWorkoutRequest(
+                            requestId = "start-$sessionId",
+                            sessionId = sessionId,
+                            routine = payload,
+                            requestedAt = requestedAt,
+                            expiresAt = requestedAt + WATCH_START_REQUEST_TTL_MILLIS,
+                        ),
+                    )
+                if (!watchOpened) {
+                    message.value = "러닝은 시작했습니다. 연결된 워치에서는 운동 앱을 직접 열어 주세요."
+                }
+            }.onFailure {
+                message.value = "러닝은 시작했지만 워치 시작 요청을 만들지 못했습니다."
+            }
+        }
     }
 
     fun startFreeRun() {
@@ -345,6 +421,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         RunningTrackingService.stop(app)
         launchAction {
             repository.savePhoneRun(
+                sessionId = completed.sessionId,
                 startedAt = completed.startedAt,
                 endedAt = completed.endedAt,
                 elapsedMillis = completed.elapsedMillis,
@@ -556,6 +633,8 @@ private data class WatchSyncState(
     val sessions: List<WorkoutSessionWithItems>,
     val restTimerSeconds: Int,
 )
+
+private const val WATCH_START_REQUEST_TTL_MILLIS = 2 * 60 * 1_000L
 
 private fun SyncResult.message(): String = error ?: "동기화 완료: 운동 ${downloadedWorkouts}개, 측정 ${downloadedMeasurements}개, 연결 ${linked}개"
 private fun ImportReport.message(): String =

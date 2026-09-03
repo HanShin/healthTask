@@ -1,6 +1,7 @@
 package com.hanshin.healthtask.wear
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -49,6 +50,7 @@ import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRunningMetrics
 import com.hanshin.healthtask.shared.WearRoutineExercise
 import com.hanshin.healthtask.shared.WearRoutinePayload
+import com.hanshin.healthtask.shared.WearStartWorkoutRequest
 import com.hanshin.healthtask.shared.TABATA_REST_SECONDS
 import com.hanshin.healthtask.shared.TABATA_ROUNDS
 import com.hanshin.healthtask.shared.TABATA_WORK_SECONDS
@@ -68,28 +70,47 @@ class WearMainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleStartWorkoutIntent(intent)
         setContent { WearWorkoutApp(viewModel) }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleStartWorkoutIntent(intent)
+    }
+
+    private fun handleStartWorkoutIntent(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_VIEW) return
+        val data = intent.data ?: return
+        val requestId = data.pathSegments
+            .takeIf { data.scheme == "healthtask" && data.host == "workout" && it.size == 2 && it[0] == "start" }
+            ?.get(1)
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        viewModel.refreshStartRequest(requestId)
+    }
 }
+
+private enum class WorkoutPicker { RUNNING, STRENGTH }
 
 @Composable
 private fun WearWorkoutApp(viewModel: WearMainViewModel) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
-    var showQuickRuns by remember { mutableStateOf(false) }
-    var pendingRoutine by remember { mutableStateOf<WearRoutinePayload?>(null) }
+    val remoteStartRequest = state.pendingStartRequest?.takeIf { it.isValid() }
+    var picker by remember { mutableStateOf<WorkoutPicker?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        pendingRoutine?.let { routine ->
-            val canTrack = sensorPermissionsFor(routine).all { permission ->
+        viewModel.pendingPermissionStart.value?.let { start ->
+            val canTrack = sensorPermissionsFor(start.routine).all { permission ->
                 result[permission] == true || ContextCompat.checkSelfPermission(context, permission) ==
                     android.content.pm.PackageManager.PERMISSION_GRANTED
             }
-            viewModel.startWorkout(routine, canTrack)
+            viewModel.completePendingPermissionStart(canTrack)
         }
-        pendingRoutine = null
     }
-    val requestStart: (WearRoutinePayload) -> Unit = { routine ->
-        val sensorPermissions = sensorPermissionsFor(routine)
+    val requestStart: (PendingWorkoutStart) -> Unit = { start ->
+        val sensorPermissions = sensorPermissionsFor(start.routine)
         val requestedPermissions = buildList {
             addAll(sensorPermissions)
             if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
@@ -98,13 +119,17 @@ private fun WearWorkoutApp(viewModel: WearMainViewModel) {
             ContextCompat.checkSelfPermission(context, permission) != android.content.pm.PackageManager.PERMISSION_GRANTED
         }
         if (missing.isEmpty()) {
-            viewModel.startWorkout(routine, trackSensors = true)
-        } else {
-            pendingRoutine = routine
+            viewModel.startWorkout(
+                routine = start.routine,
+                trackSensors = true,
+                sessionId = start.sessionId,
+                requestId = start.requestId,
+            )
+        } else if (viewModel.deferWorkoutStartForPermissions(start)) {
             launcher.launch(missing.toTypedArray())
         }
     }
-    BackHandler(enabled = showQuickRuns && state.active == null) { showQuickRuns = false }
+    BackHandler(enabled = picker != null && state.active == null && remoteStartRequest == null) { picker = null }
 
     MaterialTheme {
         val effectiveRestSeconds = maxOf(
@@ -112,7 +137,10 @@ private fun WearWorkoutApp(viewModel: WearMainViewModel) {
             remainingRestSeconds(state.active?.restEndsAt),
         )
         val scrollState = rememberScrollState()
-        LaunchedEffect(showQuickRuns, state.active != null) { scrollState.scrollTo(0) }
+        LaunchedEffect(picker, state.active?.sessionId, remoteStartRequest?.requestId) {
+            scrollState.scrollTo(0)
+            if (state.active != null || remoteStartRequest != null) picker = null
+        }
         Column(
             modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
                 .padding(start = 18.dp, end = 18.dp, top = 24.dp, bottom = 32.dp)
@@ -123,16 +151,36 @@ private fun WearWorkoutApp(viewModel: WearMainViewModel) {
                 WearRestTimerScreen(effectiveRestSeconds, viewModel)
             } else if (state.active != null) {
                 ActiveWorkoutScreen(state, viewModel)
-            } else if (showQuickRuns) {
+            } else if (remoteStartRequest != null) {
+                RemoteStartScreen(
+                    request = remoteStartRequest,
+                    onStart = {
+                        requestStart(
+                            PendingWorkoutStart(
+                                routine = remoteStartRequest.routine,
+                                sessionId = remoteStartRequest.sessionId,
+                                requestId = remoteStartRequest.requestId,
+                            ),
+                        )
+                    },
+                    onDecline = { viewModel.declineStartRequest(remoteStartRequest.requestId) },
+                )
+            } else if (picker == WorkoutPicker.RUNNING) {
                 QuickRunPickerScreen(
-                    onBack = { showQuickRuns = false },
-                    onStart = requestStart,
+                    syncedRoutine = state.routine?.takeIf { it.usesGpsRunning },
+                    onBack = { picker = null },
+                    onStart = { requestStart(PendingWorkoutStart(it)) },
+                )
+            } else if (picker == WorkoutPicker.STRENGTH) {
+                StrengthPickerScreen(
+                    syncedRoutine = state.routine?.takeIf { !it.usesGpsRunning },
+                    onBack = { picker = null },
+                    onStart = { requestStart(PendingWorkoutStart(it)) },
                 )
             } else {
                 WorkoutHomeScreen(
-                    syncedRoutine = state.routine,
-                    onQuickRun = { showQuickRuns = true },
-                    onStart = requestStart,
+                    onRunning = { picker = WorkoutPicker.RUNNING },
+                    onStrength = { picker = WorkoutPicker.STRENGTH },
                 )
             }
             state.message?.let { message ->
@@ -173,28 +221,38 @@ private fun WearRestTimerScreen(remainingSeconds: Int, viewModel: WearMainViewMo
 
 @Composable
 private fun WorkoutHomeScreen(
-    syncedRoutine: WearRoutinePayload?,
-    onQuickRun: () -> Unit,
-    onStart: (WearRoutinePayload) -> Unit,
+    onRunning: () -> Unit,
+    onStrength: () -> Unit,
 ) {
     Spacer(Modifier.height(8.dp))
     Text("운동 선택", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     Text("워치에서 바로 시작하세요", style = MaterialTheme.typography.bodySmall)
     Spacer(Modifier.height(14.dp))
-    Button(onClick = { onStart(freeWorkoutRoutinePayload()) }, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = onRunning, modifier = Modifier.fillMaxWidth().height(64.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("바로 운동", fontWeight = FontWeight.Bold)
-            Text("선택 없이 운동 기록", style = MaterialTheme.typography.labelSmall)
+            Text("러닝", fontWeight = FontWeight.Bold)
+            Text("거리 · 시간 · 자유 러닝", style = MaterialTheme.typography.labelSmall)
         }
     }
     Spacer(Modifier.height(12.dp))
-    Button(onClick = onQuickRun, modifier = Modifier.fillMaxWidth()) {
+    Button(onClick = onStrength, modifier = Modifier.fillMaxWidth().height(64.dp)) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("빠른 러닝", fontWeight = FontWeight.Bold)
-            Text("폰 없이 GPS 시작", style = MaterialTheme.typography.labelSmall)
+            Text("중량 운동", fontWeight = FontWeight.Bold)
+            Text("오늘 계획 · 자유 중량", style = MaterialTheme.typography.labelSmall)
         }
     }
-    Spacer(Modifier.height(14.dp))
+}
+
+@Composable
+private fun StrengthPickerScreen(
+    syncedRoutine: WearRoutinePayload?,
+    onBack: () -> Unit,
+    onStart: (WearRoutinePayload) -> Unit,
+) {
+    Spacer(Modifier.height(12.dp))
+    Text("중량 운동", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Text("운동 방식을 고르세요", style = MaterialTheme.typography.bodySmall)
+    Spacer(Modifier.height(10.dp))
     if (syncedRoutine != null) {
         Button(onClick = { onStart(syncedRoutine) }, modifier = Modifier.fillMaxWidth()) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -202,15 +260,50 @@ private fun WorkoutHomeScreen(
                 Text(syncedRoutine.title, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(10.dp))
         SyncedWorkoutSummary(syncedRoutine)
-    } else {
-        Text("동기화된 계획이 없어도\n바로 운동과 러닝을 시작할 수 있어요.", textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall)
+        Spacer(Modifier.height(12.dp))
     }
+    Button(onClick = { onStart(freeWorkoutRoutinePayload()) }, modifier = Modifier.fillMaxWidth()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("자유 중량", fontWeight = FontWeight.Bold)
+            Text("계획 없이 바로 기록", style = MaterialTheme.typography.labelSmall)
+        }
+    }
+    Spacer(Modifier.height(10.dp))
+    Button(onClick = onBack, modifier = Modifier.fillMaxWidth()) { Text("돌아가기") }
+}
+
+@Composable
+private fun RemoteStartScreen(
+    request: WearStartWorkoutRequest,
+    onStart: () -> Unit,
+    onDecline: () -> Unit,
+) {
+    Spacer(Modifier.height(10.dp))
+    Text("폰에서 시작한 운동", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    Spacer(Modifier.height(6.dp))
+    Text(request.routine.title, style = MaterialTheme.typography.titleSmall, textAlign = TextAlign.Center)
+    Text(
+        if (request.routine.usesGpsRunning) {
+            "러닝 측정과 제어를 워치에서 이어갈까요?"
+        } else {
+            "${request.routine.exercises.size}개 운동을 워치에서 이어서 기록할까요?"
+        },
+        style = MaterialTheme.typography.bodySmall,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(14.dp))
+    Button(onClick = onStart, modifier = Modifier.fillMaxWidth()) {
+        Text("워치에서 시작", fontWeight = FontWeight.Bold)
+    }
+    Spacer(Modifier.height(10.dp))
+    Button(onClick = onDecline, modifier = Modifier.fillMaxWidth()) { Text("폰에서만 계속") }
 }
 
 @Composable
 private fun QuickRunPickerScreen(
+    syncedRoutine: WearRoutinePayload?,
     onBack: () -> Unit,
     onStart: (WearRoutinePayload) -> Unit,
 ) {
@@ -218,6 +311,20 @@ private fun QuickRunPickerScreen(
     Text("빠른 러닝", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     Text("목표를 고르세요", style = MaterialTheme.typography.bodySmall)
     Spacer(Modifier.height(8.dp))
+    if (syncedRoutine != null) {
+        Button(
+            onClick = { onStart(syncedRoutine) },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("오늘 계획", fontWeight = FontWeight.Bold)
+                Text(syncedRoutine.title, style = MaterialTheme.typography.labelSmall, textAlign = TextAlign.Center)
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        SyncedWorkoutSummary(syncedRoutine)
+        Spacer(Modifier.height(10.dp))
+    }
     WearQuickRunPreset.entries.forEach { preset ->
         Button(
             onClick = { onStart(preset.toRoutinePayload()) },

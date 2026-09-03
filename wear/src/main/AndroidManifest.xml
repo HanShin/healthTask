@@ -28,10 +28,20 @@
         <activity
             android:name=".WearMainActivity"
             android:taskAffinity=""
+            android:launchMode="singleTop"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:scheme="healthtask"
+                    android:host="workout"
+                    android:pathPrefix="/start/" />
             </intent-filter>
         </activity>
 
@@ -41,6 +51,7 @@
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.DATA_CHANGED" />
                 <data android:scheme="wear" android:host="*" android:pathPrefix="/today-routine" />
+                <data android:scheme="wear" android:host="*" android:pathPrefix="/start-workout/" />
             </intent-filter>
         </service>
 
