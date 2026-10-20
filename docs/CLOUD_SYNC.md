@@ -20,6 +20,8 @@
 
 `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`를 실행합니다. `CloudRecordsTest`는 JSON 가져오기와 같은 ID, 누락 값, 중복 제외 정보, CSV 원본 보존, 대용량 Unicode 데이터 복원과 배치 제한과 재시도 배치 ID의 안정성을 검증합니다.
 
+GitHub의 [Android verification](https://github.com/HanShin/healthTask/actions/workflows/android.yml)은 `main` 변경과 PR, 수동 실행에서 위 검증을 원격으로 실행합니다. 이 PC에 Android 도구를 설치하지 않습니다. 보고서와 성공한 debug APK는 실행 결과의 Artifacts에서 7일간 받을 수 있습니다. 이 APK는 임시 debug 키로 서명된 테스트용이며 기존 앱 업데이트용이 아닙니다. 기존 앱 업데이트는 아래 절차대로 원래 서명 키가 있는 PC에서 진행합니다. CI는 Supabase 비밀값이나 기존 릴리스 서명 키를 사용하지 않습니다.
+
 Android 빌드와 실기기 검증은 사용자 요청에 따라 **다른 PC에서 진행**합니다. 2026-10-20에 이 PC에서 준비하던 JDK·Android SDK·Gradle 도구와 실행한 ADB 서버를 정리했습니다. 앱 단위 테스트·린트·APK 빌드는 아직 실행하지 않았습니다. JDK 17+ 및 Android SDK 36이 있는 다른 PC에서 위 명령을 실행한 후, 실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부를 확인해야 합니다.
 
 다른 PC에서 이어갈 순서:
