@@ -10,6 +10,7 @@ import com.google.gson.Gson
 import com.hanshin.healthtask.shared.WearActiveSession
 import com.hanshin.healthtask.shared.WearRoutinePayload
 import com.hanshin.healthtask.shared.WearStartWorkoutRequest
+import com.hanshin.healthtask.shared.usesGpsRunning
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -32,10 +33,11 @@ class WatchStore private constructor(
     val pendingStartRequest: Flow<WearStartWorkoutRequest?> = dataStore.data.map { values ->
         values[PENDING_START_REQUEST]
             ?.let { json -> runCatching { gson.fromJson(json, WearStartWorkoutRequest::class.java) }.getOrNull() }
-            ?.takeIf { it.isValid() }
+            ?.takeIf { it.isValid() && it.routine.usesGpsRunning }
     }
 
     suspend fun saveRoutine(value: WearRoutinePayload) {
+        if (!value.usesGpsRunning) return
         dataStore.edit { it[ROUTINE] = gson.toJson(value) }
     }
 
@@ -55,11 +57,11 @@ class WatchStore private constructor(
         value: WearStartWorkoutRequest,
         now: Long = System.currentTimeMillis(),
     ) {
-        if (!value.isValid(now)) return
+        if (!value.isValid(now) || !value.routine.usesGpsRunning) return
         dataStore.edit { values ->
             val current = values[PENDING_START_REQUEST]
                 ?.let { json -> runCatching { gson.fromJson(json, WearStartWorkoutRequest::class.java) }.getOrNull() }
-            if (current == null || !current.isValid(now) || value.requestedAt >= current.requestedAt) {
+            if (current == null || !current.isValid(now) || !current.routine.usesGpsRunning || value.requestedAt >= current.requestedAt) {
                 values[PENDING_START_REQUEST] = gson.toJson(value)
             }
         }

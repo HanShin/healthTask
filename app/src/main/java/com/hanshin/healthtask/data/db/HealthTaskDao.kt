@@ -6,10 +6,40 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Update
+import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface HealthTaskDao {
+    @Query("SELECT * FROM inbody_records ORDER BY measuredLocal DESC")
+    fun observeInBodyRecords(): Flow<List<InBodyRecordEntity>>
+
+    @Query("SELECT * FROM inbody_records ORDER BY measuredLocal DESC")
+    suspend fun getInBodyRecords(): List<InBodyRecordEntity>
+
+    @Query("SELECT * FROM inbody_records WHERE id = :id")
+    suspend fun getInBodyRecord(id: String): InBodyRecordEntity?
+
+    @Upsert suspend fun upsertInBodyRecord(record: InBodyRecordEntity)
+
+    @Query("DELETE FROM inbody_records WHERE id = :id")
+    suspend fun deleteInBodyRecord(id: String)
+
+    @Query("DELETE FROM health_measurements WHERE externalRecordId = :id AND sourcePackage = 'com.inbody2014.inbody'")
+    suspend fun deleteInBodyRecordMetrics(id: String)
+
+    @Query("SELECT * FROM run_telemetry_chunks ORDER BY sessionId, chunkIndex")
+    suspend fun getTelemetryChunks(): List<RunTelemetryChunkEntity>
+
+    @Query("SELECT * FROM run_telemetry_chunks WHERE sessionId = :sessionId ORDER BY chunkIndex")
+    suspend fun getTelemetryChunks(sessionId: String): List<RunTelemetryChunkEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTelemetryChunks(chunks: List<RunTelemetryChunkEntity>)
+
+    @Query("DELETE FROM run_telemetry_chunks WHERE sessionId = :sessionId")
+    suspend fun deleteTelemetryChunks(sessionId: String)
+
     @Query("SELECT * FROM profiles WHERE id = 'local-profile' LIMIT 1")
     fun observeProfile(): Flow<ProfileEntity?>
 
@@ -131,6 +161,9 @@ interface HealthTaskDao {
 
     @Query("SELECT * FROM health_measurements ORDER BY recordDate DESC, measuredAt DESC")
     suspend fun getHealthMeasurements(): List<HealthMeasurementEntity>
+
+    @Query("SELECT * FROM health_measurements WHERE id = :id LIMIT 1")
+    suspend fun getHealthMeasurement(id: String): HealthMeasurementEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertHealthMeasurements(values: List<HealthMeasurementEntity>)

@@ -1,17 +1,10 @@
 package com.hanshin.healthtask.data
 
 import androidx.room.withTransaction
-import com.hanshin.healthtask.data.db.ExerciseEntity
 import com.hanshin.healthtask.data.db.HealthMeasurementEntity
 import com.hanshin.healthtask.data.db.HealthTaskDatabase
 import com.hanshin.healthtask.data.db.ProfileEntity
-import com.hanshin.healthtask.data.db.PlanSlotEntity
-import com.hanshin.healthtask.data.db.RoutineEntity
-import com.hanshin.healthtask.data.db.RoutineItemEntity
-import com.hanshin.healthtask.data.db.RoutineWithItems
 import com.hanshin.healthtask.data.db.SetRecordEntity
-import com.hanshin.healthtask.data.db.TrainingPlanEntity
-import com.hanshin.healthtask.data.db.TrainingPlanWithSlots
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionWithItems
@@ -21,229 +14,34 @@ import com.hanshin.healthtask.domain.INBODY_PACKAGE
 import com.hanshin.healthtask.domain.PlannedWorkoutType
 import com.hanshin.healthtask.domain.RecordMode
 import com.hanshin.healthtask.domain.SyncStatus
-import com.hanshin.healthtask.domain.TrainingGoalType
 import com.hanshin.healthtask.domain.WorkoutSource
 import com.hanshin.healthtask.domain.WorkoutStatus
-import com.hanshin.healthtask.domain.latestCompletedSet
 import com.hanshin.healthtask.domain.isRun
-import com.hanshin.healthtask.domain.workoutStatus
 import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearRecordMode
-import com.hanshin.healthtask.shared.TABATA_EXERCISE_ID
-import com.hanshin.healthtask.shared.TABATA_REST_SECONDS
-import com.hanshin.healthtask.shared.TABATA_ROUNDS
-import com.hanshin.healthtask.shared.TABATA_TOTAL_SECONDS
-import com.hanshin.healthtask.shared.TABATA_WORK_SECONDS
+import com.hanshin.healthtask.shared.RunTelemetryCodec
+import com.hanshin.healthtask.shared.summarize
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import com.hanshin.healthtask.domain.isExternal
 
 class HealthTaskRepository(private val database: HealthTaskDatabase) {
     val dao = database.dao()
-    val profile: Flow<ProfileEntity?> = dao.observeProfile()
-    val exercises: Flow<List<ExerciseEntity>> = dao.observeExercises()
-    val routines: Flow<List<RoutineWithItems>> = dao.observeRoutines()
-    val trainingPlans: Flow<List<TrainingPlanWithSlots>> = dao.observeTrainingPlans()
     val sessions: Flow<List<WorkoutSessionWithItems>> = dao.observeSessions()
     val healthMeasurements: Flow<List<HealthMeasurementEntity>> = dao.observeHealthMeasurements()
+    val inBodyRecords = dao.observeInBodyRecords()
+    val inBodyCsv = InBodyCsvStorage(database)
     val workoutLinks = dao.observeWorkoutLinks()
 
-    suspend fun initialize() {
-        val existingExerciseIds = dao.getExercises().mapTo(mutableSetOf()) { it.id }
-        val missingExercises = SeedData.exercises.filterNot { it.id in existingExerciseIds }
-        if (missingExercises.isNotEmpty()) dao.upsertExercises(missingExercises)
-        val profile = dao.getProfile()
-        if (profile?.onboardingDone == true && dao.getTrainingPlans().none { it.plan.isActive }) {
-            rebuildTrainingPlan(TrainingGoalType.BALANCED)
-        }
-    }
-
-    suspend fun finishOnboarding(workoutsPerWeek: Int, installTemplates: Boolean) {
-        val now = System.currentTimeMillis()
-        database.withTransaction {
-            dao.upsertProfile(ProfileEntity(workoutsPerWeek = workoutsPerWeek.coerceIn(1, 7), onboardingDone = true, createdAt = now, updatedAt = now))
-            if (installTemplates && dao.getRoutines().isEmpty()) {
-                SeedData.templates.take(workoutsPerWeek.coerceAtMost(SeedData.templates.size)).forEachIndexed { index, template ->
-                    val id = "routine-${UUID.randomUUID()}"
-                    dao.upsertRoutine(template.routine.copy(id = id, createdAt = now + index, updatedAt = now + index))
-                    dao.upsertRoutineItems(template.items.map { it.copy(id = "plan-${UUID.randomUUID()}", routineId = id) })
-                }
-            }
-            replaceActiveTrainingPlan(
-                goalType = TrainingGoalType.BALANCED,
-                weeklyGoal = workoutsPerWeek.coerceIn(1, 7),
-                routines = dao.getRoutines(),
-            )
-        }
-    }
-
-    suspend fun saveRoutine(routineId: String?, name: String, exerciseIds: List<String>) {
-        require(name.isNotBlank()) { "루틴 이름을 입력해 주세요." }
-        require(exerciseIds.isNotEmpty()) { "운동을 한 개 이상 추가해 주세요." }
-        val id = routineId ?: "routine-${UUID.randomUUID()}"
-        val now = System.currentTimeMillis()
-        val existing = routineId?.let { dao.getRoutine(it) }
-        val exerciseMap = dao.getExercises().associateBy { it.id }
-        val orderedExerciseIds = exerciseIds.filterNot { it == TABATA_EXERCISE_ID } +
-            exerciseIds.filter { it == TABATA_EXERCISE_ID }
-        database.withTransaction {
-            dao.upsertRoutine(
-                RoutineEntity(
-                    id = id,
-                    name = name.trim(),
-                    source = existing?.routine?.source ?: "manual",
-                    isActive = existing?.routine?.isActive ?: true,
-                    createdAt = existing?.routine?.createdAt ?: now,
-                    updatedAt = now,
-                )
-            )
-            dao.deleteRoutineItems(id)
-            dao.upsertRoutineItems(orderedExerciseIds.mapIndexed { index, exerciseId ->
-                val exercise = requireNotNull(exerciseMap[exerciseId])
-                val isTabata = exerciseId == TABATA_EXERCISE_ID
-                RoutineItemEntity(
-                    id = "plan-${UUID.randomUUID()}",
-                    routineId = id,
-                    exerciseId = exerciseId,
-                    orderIndex = index + 1,
-                    category = exercise.category,
-                    recordMode = exercise.recordMode,
-                    setCount = if (exercise.recordMode == RecordMode.SETS) 3 else null,
-                    targetReps = if (exercise.recordMode == RecordMode.SETS) 10 else null,
-                    restSeconds = if (exercise.recordMode == RecordMode.SETS) 60 else null,
-                    targetWeightKg = if (exercise.category == ExerciseCategory.WEIGHT) 10.0 else null,
-                    targetActivityLabel = when {
-                        isTabata -> "${TABATA_WORK_SECONDS}초 운동 · ${TABATA_REST_SECONDS}초 휴식 × $TABATA_ROUNDS"
-                        exercise.recordMode == RecordMode.CARDIO -> "유산소"
-                        else -> null
-                    },
-                    targetDurationMin = when {
-                        isTabata -> TABATA_TOTAL_SECONDS / 60.0
-                        exercise.recordMode == RecordMode.CARDIO -> 20.0
-                        else -> null
-                    },
-                )
-            })
-            fillUnassignedStrengthSlots(id, name.trim())
-        }
-    }
-
-    suspend fun installTemplate(templateId: String) {
-        val template = requireNotNull(SeedData.templates.find { it.routine.id == templateId })
-        val now = System.currentTimeMillis()
-        val id = "routine-${UUID.randomUUID()}"
-        database.withTransaction {
-            dao.upsertRoutine(template.routine.copy(id = id, createdAt = now, updatedAt = now))
-            dao.upsertRoutineItems(template.items.map { it.copy(id = "plan-${UUID.randomUUID()}", routineId = id) })
-            fillUnassignedStrengthSlots(id, template.routine.name)
-        }
-    }
-
-    suspend fun deleteRoutine(id: String) = database.withTransaction {
-        dao.detachRoutineFromPlanSlots(id)
-        dao.deleteRoutineItems(id)
-        dao.deleteRoutine(id)
-    }
-
-    suspend fun rebuildTrainingPlan(goalType: TrainingGoalType) {
-        val weeklyGoal = dao.getProfile()?.workoutsPerWeek ?: 3
-        database.withTransaction {
-            replaceActiveTrainingPlan(goalType, weeklyGoal, dao.getRoutines())
-        }
-    }
-
-    suspend fun startSession(routineId: String, planSlotId: String? = null): String {
-        val routine = requireNotNull(dao.getRoutine(routineId)) { "루틴을 찾을 수 없습니다." }
-        val planSlot = planSlotId?.let { requireNotNull(dao.getPlanSlot(it)) { "계획 운동을 찾을 수 없습니다." } }
-        require(planSlot == null || planSlot.workoutType == PlannedWorkoutType.STRENGTH) {
-            "근력 계획만 루틴으로 시작할 수 있습니다."
-        }
-        val exercises = dao.getExercises().associateBy { it.id }
-        val sessionId = "session-${UUID.randomUUID()}"
-        val now = System.currentTimeMillis()
-        val previous = dao.getSessions()
-        database.withTransaction {
-            require(dao.getSessions().none { it.session.status == WorkoutStatus.ACTIVE }) {
-                "진행 중인 근력운동을 먼저 완료해 주세요."
-            }
-            dao.upsertSession(
-                WorkoutSessionEntity(
-                    id = sessionId,
-                    routineId = routineId,
-                    planSlotId = planSlotId,
-                    title = routine.routine.name,
-                    sessionDate = LocalDate.now().toString(),
-                    status = WorkoutStatus.ACTIVE,
-                    source = WorkoutSource.LOCAL,
-                    startedAt = now,
-                    syncStatus = SyncStatus.PENDING,
-                )
-            )
-            routine.items.sortedBy { it.orderIndex }.forEach { plan ->
-                val exercise = exercises[plan.exerciseId] ?: return@forEach
-                val itemId = "item-${UUID.randomUUID()}"
-                dao.upsertWorkoutItems(listOf(WorkoutItemEntity(
-                    id = itemId,
-                    sessionId = sessionId,
-                    exerciseId = plan.exerciseId,
-                    exerciseName = exercise.name,
-                    orderIndex = plan.orderIndex,
-                    category = plan.category,
-                    recordMode = plan.recordMode,
-                    activityLabel = plan.targetActivityLabel,
-                    distanceKm = plan.targetDistanceKm,
-                    durationMin = plan.targetDurationMin.takeUnless { plan.exerciseId == TABATA_EXERCISE_ID },
-                    avgPaceMinPerKm = plan.targetPaceMinPerKm,
-                    note = plan.note,
-                )))
-                if (plan.recordMode == RecordMode.SETS) {
-                    val carry = latestCompletedSet(previous, plan.exerciseId)
-                    dao.upsertSetRecords((1..(plan.setCount ?: 3)).map { order ->
-                        SetRecordEntity(
-                            id = "set-${UUID.randomUUID()}",
-                            workoutItemId = itemId,
-                            orderIndex = order,
-                            plannedReps = plan.targetReps,
-                            actualReps = carry?.actualReps ?: plan.targetReps,
-                            plannedWeightKg = plan.targetWeightKg,
-                            actualWeightKg = carry?.actualWeightKg ?: plan.targetWeightKg,
-                        )
-                    })
-                }
-            }
-        }
-        return sessionId
-    }
-
-    suspend fun updateSet(set: SetRecordEntity) = database.withTransaction {
-        val sessionId = dao.getSessionIdForWorkoutItem(set.workoutItemId) ?: return@withTransaction
-        val session = dao.getSession(sessionId)?.session ?: return@withTransaction
-        if (session.status != WorkoutStatus.ACTIVE || session.memo == WATCH_WORKOUT_MEMO) return@withTransaction
-        dao.upsertSetRecords(listOf(set))
-    }
-
-    suspend fun updateWorkoutItem(item: WorkoutItemEntity) = database.withTransaction {
-        val session = dao.getSession(item.sessionId)?.session ?: return@withTransaction
-        if (session.status != WorkoutStatus.ACTIVE || session.memo == WATCH_WORKOUT_MEMO) return@withTransaction
-        dao.upsertWorkoutItems(listOf(item))
-    }
-
-    suspend fun finishSession(sessionId: String): WorkoutSessionEntity = database.withTransaction {
-        val full = requireNotNull(dao.getSession(sessionId))
-        if (full.session.status != WorkoutStatus.ACTIVE || full.session.memo == WATCH_WORKOUT_MEMO) {
-            return@withTransaction full.session
-        }
-        val now = System.currentTimeMillis()
-        val updated = full.session.copy(
-            status = workoutStatus(full.items),
-            endedAt = now,
-            syncStatus = SyncStatus.PENDING,
-            updatedAt = now,
-        )
-        dao.updateSession(updated)
-        updated
+    suspend fun initialize() = database.withTransaction {
+        // Historical strength tables remain intact for lossless upgrades and backup restore.
+        val existing = dao.getExercises().mapTo(mutableSetOf()) { it.id }
+        dao.upsertExercises(SeedData.exercises.filterNot { it.id in existing })
+        // Keep the legacy profile for backup compatibility, without configuring goals.
+        if (dao.getProfile() == null) dao.upsertProfile(ProfileEntity(onboardingDone = true))
     }
 
     suspend fun savePhoneRun(
@@ -292,6 +90,7 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
             savedSession = phoneSession.copy(
                 caloriesKcal = existing?.caloriesKcal,
                 averageHeartRateBpm = existing?.averageHeartRateBpm,
+                sensorSummaryJson = existing?.sensorSummaryJson,
                 distanceKm = distanceKm.takeIf { it > 0.0 } ?: existing?.distanceKm,
                 routePolyline = routePolyline?.takeIf { it.isNotBlank() } ?: existing?.routePolyline,
                 createdAt = existing?.createdAt ?: phoneSession.createdAt,
@@ -317,33 +116,46 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
     }
 
     suspend fun deleteSession(id: String) = database.withTransaction {
+        dao.deleteTelemetryChunks(id)
         dao.deleteSetsForSession(id)
         dao.deleteItemsForSession(id)
         dao.deleteSession(id)
     }
 
-    suspend fun saveManualHealthMetric(date: LocalDate, type: HealthMetricType, value: Double) {
-        require(value > 0.0) { "0보다 큰 값을 입력해 주세요." }
+    suspend fun saveManualHealthMetric(date: LocalDate, type: HealthMetricType, value: Double) =
+        saveBodyMeasurement(date, type, value)
+
+    suspend fun saveBodyMeasurement(date: LocalDate, type: HealthMetricType, value: Double, existingId: String? = null) {
+        require(!date.isAfter(LocalDate.now())) { "측정일은 오늘 또는 과거 날짜로 입력해 주세요." }
+        require(com.hanshin.healthtask.domain.isValidBodyValue(type, value)) { "올바른 측정값을 입력해 주세요." }
+        val existing = existingId?.let { requireNotNull(dao.getHealthMeasurement(it)) { "기록을 찾을 수 없습니다." } }
+        require(existing?.externalRecordId?.startsWith("inbody-csv-") != true) { "CSV 기록은 원본 파일을 보존합니다. 측정 기록 전체를 삭제한 후 다시 가져와 주세요." }
+        require(existing == null || !existing.source.isExternal()) { "연동 기록은 원본 앱에서 수정해 주세요." }
         val now = System.currentTimeMillis()
         dao.upsertHealthMeasurements(listOf(HealthMeasurementEntity(
-            id = "health-local-${date}-$type",
+            id = existing?.id ?: "health-local-${UUID.randomUUID()}",
             recordDate = date.toString(),
-            measuredAt = date.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli(),
-            type = type,
-            value = value,
-            source = WorkoutSource.LOCAL,
-            updatedAt = now,
+            measuredAt = if (date == LocalDate.now()) now else date.atTime(12, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+            type = type, value = value, source = WorkoutSource.LOCAL,
+            sourcePackage = existing?.sourcePackage,
+            createdAt = existing?.createdAt ?: now, updatedAt = now,
         )))
     }
 
+    suspend fun deleteBodyMeasurement(id: String) {
+        val metric = dao.getHealthMeasurement(id) ?: return
+        require(metric.externalRecordId?.startsWith("inbody-csv-") != true) { "CSV 기록은 측정 기록 전체에서 삭제해 주세요." }
+        require(!metric.source.isExternal()) { "연동 기록은 원본 앱에서 삭제해 주세요." }
+        dao.deleteHealthMeasurement(id)
+    }
+
     suspend fun saveInBodyScreenshotMetrics(date: LocalDate, values: Map<HealthMetricType, Double>) {
-        val supportedTypes = setOf(
-            HealthMetricType.SKELETAL_MUSCLE_KG,
-            HealthMetricType.VISCERAL_FAT_LEVEL,
-            HealthMetricType.INBODY_SCORE,
-        )
-        val accepted = values.filterKeys { it in supportedTypes }.filterValues { it > 0.0 }
+        require(!date.isAfter(LocalDate.now())) { "측정일을 확인해 주세요." }
+        val accepted = values.filterKeys { it != HealthMetricType.BODY_WATER_L }
         require(accepted.isNotEmpty()) { "저장할 인바디 수치가 없습니다." }
+        require(accepted.all { (type, value) -> com.hanshin.healthtask.domain.isValidBodyValue(type, value) }) {
+            "올바른 인바디 수치를 입력해 주세요."
+        }
         val now = System.currentTimeMillis()
         val measuredAt = if (date == LocalDate.now()) {
             now
@@ -364,132 +176,21 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
         })
     }
 
-    suspend fun updateProfileGoal(workoutsPerWeek: Int) {
-        val current = dao.getProfile() ?: ProfileEntity(onboardingDone = true)
-        database.withTransaction {
-            val goal = workoutsPerWeek.coerceIn(1, 7)
-            dao.upsertProfile(current.copy(
-                workoutsPerWeek = goal,
-                updatedAt = System.currentTimeMillis(),
-            ))
-            val goalType = dao.getTrainingPlans().firstOrNull { it.plan.isActive }?.plan?.goalType
-                ?: TrainingGoalType.BALANCED
-            replaceActiveTrainingPlan(goalType, goal, dao.getRoutines())
-        }
-    }
-
     suspend fun getSession(id: String) = dao.getSession(id)
-    suspend fun getRoutine(id: String) = dao.getRoutine(id)
-    suspend fun getPlanSlot(id: String) = dao.getPlanSlot(id)
     suspend fun getAllSessions() = dao.getSessions()
     suspend fun getLinks() = dao.getWorkoutLinks()
 
-    private suspend fun fillUnassignedStrengthSlots(routineId: String, routineName: String) {
-        val activePlan = dao.getTrainingPlans().firstOrNull { it.plan.isActive } ?: return
-        val replacements = activePlan.slots.filter {
-            it.workoutType == PlannedWorkoutType.STRENGTH && it.routineId == null
-        }.map { it.copy(routineId = routineId, title = routineName) }
-        if (replacements.isNotEmpty()) dao.upsertPlanSlots(replacements)
-    }
-
-    private suspend fun replaceActiveTrainingPlan(
-        goalType: TrainingGoalType,
-        weeklyGoal: Int,
-        routines: List<RoutineWithItems>,
-    ) {
-        val now = System.currentTimeMillis()
-        val planId = "training-plan-${UUID.randomUUID()}"
-        val strengthRoutines = routines.filter { routine ->
-            routine.routine.isActive && routine.items.any { it.recordMode == RecordMode.SETS }
-        }
-        val availableRoutines = strengthRoutines.filter { routine ->
-            routine.items.none {
-                it.recordMode == RecordMode.CARDIO && it.exerciseId != TABATA_EXERCISE_ID
-            }
-        }.ifEmpty { strengthRoutines }
-        val pattern = when (goalType) {
-            TrainingGoalType.BALANCED -> listOf(
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.EASY_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.QUALITY_RUN,
-                PlannedWorkoutType.LONG_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.EASY_RUN,
-            )
-            TrainingGoalType.RUNNING -> listOf(
-                PlannedWorkoutType.EASY_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.QUALITY_RUN,
-                PlannedWorkoutType.EASY_RUN,
-                PlannedWorkoutType.LONG_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.EASY_RUN,
-            )
-            TrainingGoalType.STRENGTH -> listOf(
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.EASY_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.QUALITY_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.EASY_RUN,
-                PlannedWorkoutType.STRENGTH,
-            )
-        }.take(weeklyGoal.coerceIn(1, 7))
-        val planName = when (goalType) {
-            TrainingGoalType.BALANCED -> "균형형 주간 계획"
-            TrainingGoalType.RUNNING -> "러닝 성장형 주간 계획"
-            TrainingGoalType.STRENGTH -> "근력 성장형 주간 계획"
-        }
-
-        dao.deactivateTrainingPlans(now)
-        dao.upsertTrainingPlan(TrainingPlanEntity(
-            id = planId,
-            name = planName,
-            goalType = goalType,
-            createdAt = now,
-            updatedAt = now,
-        ))
-        var strengthIndex = 0
-        dao.upsertPlanSlots(pattern.mapIndexed { index, workoutType ->
-            val routine = if (workoutType == PlannedWorkoutType.STRENGTH && availableRoutines.isNotEmpty()) {
-                availableRoutines[strengthIndex++ % availableRoutines.size]
-            } else null
-            val title = when (workoutType) {
-                PlannedWorkoutType.STRENGTH -> routine?.routine?.name ?: "근력 루틴 필요"
-                PlannedWorkoutType.EASY_RUN -> "이지런"
-                PlannedWorkoutType.QUALITY_RUN -> "템포런"
-                PlannedWorkoutType.LONG_RUN -> "롱런"
-            }
-            PlanSlotEntity(
-                id = "plan-slot-${UUID.randomUUID()}",
-                planId = planId,
-                orderIndex = index + 1,
-                workoutType = workoutType,
-                routineId = routine?.routine?.id,
-                title = title,
-                preferredDayOfWeek = ((index * 7) / pattern.size.coerceAtLeast(1)) + 1,
-                targetDurationMin = when (workoutType) {
-                    PlannedWorkoutType.EASY_RUN -> 30.0
-                    PlannedWorkoutType.QUALITY_RUN -> 35.0
-                    PlannedWorkoutType.LONG_RUN -> 60.0
-                    PlannedWorkoutType.STRENGTH -> null
-                },
-                targetDistanceKm = if (workoutType == PlannedWorkoutType.QUALITY_RUN) 5.0 else null,
-                note = when (workoutType) {
-                    PlannedWorkoutType.STRENGTH -> "세트와 중량을 기록해요."
-                    PlannedWorkoutType.EASY_RUN -> "편안하게 대화할 수 있는 강도로 달려요."
-                    PlannedWorkoutType.QUALITY_RUN -> "일정하게 빠른 리듬을 유지해요."
-                    PlannedWorkoutType.LONG_RUN -> "지속 가능한 속도로 오래 달려요."
-                },
-                createdAt = now + index,
-            )
-        })
-    }
-
+    // Old watch queues may still contain strength workouts. Preserve them as archived
+    // records; the running-only UI and Health Connect upload never include them.
     /** Imports a completed watch workout exactly once, even if the Data Layer retries delivery. */
     suspend fun importWearWorkout(workout: WearCompletedWorkout): Boolean {
         require(workout.endedAt >= workout.startedAt) { "워치 운동 시간이 올바르지 않습니다." }
+        require(workout.schemaVersion in 1..5) { "워치 앱과 휴대폰 앱을 모두 업데이트해 주세요." }
+        val telemetryChunks = workout.telemetry?.let {
+            require(it.metadata.sessionId == workout.sessionId) { "센서 기록의 러닝 ID가 다릅니다." }
+            it.toStorageChunks().also { chunks -> chunks.decodeTelemetry() }
+        }
+        val sensorSummary = workout.telemetry?.summarize()?.let(RunTelemetryCodec::encodeSummary)
         val sessionDate = Instant.ofEpochMilli(workout.startedAt)
             .atZone(ZoneId.systemDefault()).toLocalDate().toString()
         val completedItems = workout.exercises.count { exercise ->
@@ -506,6 +207,10 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
         var imported = false
         database.withTransaction {
             val existing = dao.getSession(workout.sessionId)
+            if (telemetryChunks != null) {
+                dao.deleteTelemetryChunks(workout.sessionId)
+                dao.upsertTelemetryChunks(telemetryChunks)
+            }
             if (existing != null && workout.isPhoneStartedRun()) {
                 val current = existing.session
                 val mergedDistance = current.distanceKm?.takeIf { it > 0.0 } ?: workout.distanceKm
@@ -517,6 +222,7 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
                     averageHeartRateBpm = workout.averageHeartRateBpm ?: current.averageHeartRateBpm,
                     routePolyline = mergedRoute,
                     activeDurationMillis = mergedDuration,
+                    sensorSummaryJson = sensorSummary ?: current.sensorSummaryJson,
                 )
                 val mergedItems = existing.items.map { itemWithSets ->
                     val item = itemWithSets.item
@@ -544,7 +250,13 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
                 }
                 return@withTransaction
             }
-            if (existing?.session?.memo == WATCH_WORKOUT_MEMO) return@withTransaction
+            if (existing?.session?.memo == WATCH_WORKOUT_MEMO) {
+                if (sensorSummary != null && sensorSummary != existing.session.sensorSummaryJson) {
+                    dao.updateSession(existing.session.copy(sensorSummaryJson = sensorSummary))
+                    imported = true
+                }
+                return@withTransaction
+            }
             imported = true
             dao.deleteSetsForSession(workout.sessionId)
             dao.deleteItemsForSession(workout.sessionId)
@@ -564,6 +276,7 @@ class HealthTaskRepository(private val database: HealthTaskDatabase) {
                 averageHeartRateBpm = workout.averageHeartRateBpm,
                 routePolyline = workout.routePolyline,
                 activeDurationMillis = workout.activeDurationMillis,
+                sensorSummaryJson = sensorSummary,
                 syncStatus = SyncStatus.PENDING,
                 createdAt = existing?.session?.createdAt ?: System.currentTimeMillis(),
             ))

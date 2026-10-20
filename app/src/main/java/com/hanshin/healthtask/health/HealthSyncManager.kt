@@ -16,6 +16,7 @@ import com.hanshin.healthtask.domain.WorkoutSummary
 import com.hanshin.healthtask.domain.ExternalWorkout
 import com.hanshin.healthtask.domain.bestAutomaticLink
 import com.hanshin.healthtask.domain.isExternal
+import com.hanshin.healthtask.domain.isRunningRecord
 import java.time.ZoneId
 import java.util.UUID
 import kotlinx.coroutines.flow.first
@@ -59,7 +60,7 @@ class HealthSyncManager(
                     }
                     dao.deleteHealthMeasurementsByExternalRecord(recordId)
                 }
-                snapshot.workouts.forEach { record ->
+                snapshot.workouts.filter { it.isRunning }.forEach { record ->
                     val id = externalSessionId(record)
                     val existing = dao.getSessionByHealthRecord(record.recordId)
                     dao.upsertSession(WorkoutSessionEntity(
@@ -81,7 +82,7 @@ class HealthSyncManager(
                     dao.upsertWorkoutItems(listOf(WorkoutItemEntity(
                         id = "$id-summary",
                         sessionId = existing?.id ?: id,
-                        exerciseId = "external-${record.category.name.lowercase()}",
+                        exerciseId = "external-running",
                         exerciseName = record.title,
                         orderIndex = 1,
                         category = record.category,
@@ -107,7 +108,7 @@ class HealthSyncManager(
                     )
                 })
 
-                val all = dao.getSessions()
+                val all = dao.getSessions().filter { it.isRunningRecord() }
                 val categories = all.associate { full -> full.session.id to full.items.firstOrNull()?.item?.category }
                 val existingLinks = dao.getWorkoutLinks()
                 val linkedExternal = existingLinks.mapTo(mutableSetOf()) { it.samsungSessionId }
@@ -117,7 +118,7 @@ class HealthSyncManager(
                     .map { it.session }
                     .filter { it.source.isExternal() && it.id !in linkedExternal }
                     .forEach { external ->
-                        val match = bestAutomaticLink(local, external, categories[external.id]) { categories[it] }
+                        val match = bestAutomaticLink(local.filterNot { it.id in linkedLocal }, external, categories[external.id]) { categories[it] }
                         if (match != null) {
                             dao.upsertWorkoutLink(SamsungWorkoutLinkEntity(
                                 id = "link-${UUID.randomUUID()}",
@@ -134,7 +135,7 @@ class HealthSyncManager(
                 snapshot.nextChangesToken?.let { dao.upsertSyncState(SyncStateEntity(CHANGES_TOKEN, it)) }
             }
             preferences.markSynced()
-            SyncResult(uploaded, snapshot.workouts.size, snapshot.measurements.size, linked)
+            SyncResult(uploaded, snapshot.workouts.count { it.isRunning }, snapshot.measurements.size, linked)
         } catch (error: Throwable) {
             database.dao().upsertSyncState(SyncStateEntity("last_error", error.message ?: error.javaClass.simpleName))
             SyncResult(error = error.message ?: "동기화에 실패했습니다.")
@@ -145,11 +146,12 @@ class HealthSyncManager(
         var success = 0
         val dao = database.dao()
         dao.getPendingSessions().forEach { session ->
+            val full = dao.getSession(session.id) ?: return@forEach
+            if (!full.isRunningRecord()) return@forEach
             if (session.status == WorkoutStatus.SKIPPED || session.endedAt == null) {
                 dao.updateSession(session.copy(syncStatus = SyncStatus.SYNCED, syncError = null))
                 return@forEach
             }
-            val full = dao.getSession(session.id) ?: return@forEach
             val category = full.items.firstOrNull()?.item?.category ?: return@forEach
             try {
                 val recordId = gateway.writeWorkout(WorkoutSummary(
@@ -188,6 +190,6 @@ class HealthSyncManager(
     }
 
     private companion object {
-        const val CHANGES_TOKEN = "health_changes_token_v2"
+        const val CHANGES_TOKEN = "health_running_changes_token_v3"
     }
 }

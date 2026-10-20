@@ -67,14 +67,13 @@ class WearProtocolTest {
         assertEquals(5.0, distance.exercises.single().targetDistanceKm!!, 0.001)
     }
 
-    @Test fun `free workout uses strength sensors without GPS`() {
-        val workout = freeWorkoutRoutinePayload(updatedAt = 40L)
-
-        assertEquals(WearSensorMode.STRENGTH, workout.sensorMode)
-        assertEquals(false, workout.usesGpsRunning)
-        assertEquals(WearRecordMode.CARDIO, workout.exercises.single().recordMode)
-        assertEquals("WEIGHT", workout.exercises.single().category)
-        assertNull(workout.planSlotId)
+    @Test fun `only pure running payloads enable GPS running`() {
+        val run = WearQuickRunPreset.FREE_RUN.toRoutinePayload()
+        assertTrue(run.usesGpsRunning)
+        assertFalse(run.copy(sensorMode = WearSensorMode.STRENGTH).usesGpsRunning)
+        assertFalse(run.copy(exercises = emptyList()).usesGpsRunning)
+        assertFalse(run.copy(exercises = run.exercises.map { it.copy(category = "WEIGHT") }).usesGpsRunning)
+        assertFalse(run.copy(exercises = run.exercises.map { it.copy(exerciseId = "tabata-finisher") }).usesGpsRunning)
     }
 
     @Test fun `start request validates identity payload and expiry`() {

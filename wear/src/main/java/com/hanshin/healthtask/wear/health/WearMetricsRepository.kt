@@ -4,6 +4,7 @@ import com.hanshin.healthtask.shared.WearRoutePoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 data class WearMetrics(
     val heartRateBpm: Double? = null,
@@ -11,6 +12,9 @@ data class WearMetrics(
     val caloriesKcal: Double? = null,
     val distanceKm: Double? = null,
     val speedMetersPerSecond: Double? = null,
+    val cadenceStepsPerMinute: Double? = null,
+    val stepsTotal: Long? = null,
+    val elevationGainMeters: Double? = null,
     val activeDurationMillis: Long = 0L,
     val completedKilometers: Int = 0,
     val lastLapDurationMillis: Long? = null,
@@ -25,5 +29,5 @@ object WearMetricsRepository {
     val metrics: StateFlow<WearMetrics> = mutableMetrics.asStateFlow()
 
     fun reset() { mutableMetrics.value = WearMetrics(tracking = true) }
-    fun update(transform: (WearMetrics) -> WearMetrics) { mutableMetrics.value = transform(mutableMetrics.value) }
+    fun update(transform: (WearMetrics) -> WearMetrics) { mutableMetrics.update(transform) }
 }

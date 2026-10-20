@@ -1,38 +1,53 @@
-# Session Handoff
+# 개발 인수인계
 
-## 현재 상태
+## 현재 상태 — 2026-10-20
 
-`오늘운동`은 PWA가 아닌 Android 네이티브 앱입니다. 기존 웹 버전은 `pwa-final-2026-08-21` 태그에만 남아 있고 현재 브랜치는 `main`입니다.
+현재 제품은 **오늘러닝 2.0.0 (`versionCode 10`)**입니다. 휴대폰과 워치 모두 러닝 전용이며, 휴대폰에서 인바디·체성분 기록도 관리합니다. 저장소 브랜치는 `main`, 패키지는 양쪽 모두 `com.hanshin.healthtask`입니다. 과거 PWA는 `pwa-final-2026-08-21` 태그에 보존합니다.
 
-핵심 코드는 다음 위치에 있습니다.
+- 휴대폰: `러닝 / 러닝 기록 / 인바디 / 설정` 네 탭. 첫 실행 설문·주간 목표·근력 기능 없음
+- 러닝: 휴대폰/워치 GPS, 배경 지도, 랩, 휴대폰 자동 일시정지·음성 안내, 완료 기록 동기화
+- 인바디: 직접 입력·캡처·CSV, 43개 지표와 원본 열, 같은 날 여러 측정 보존, 항목별 변화 카드
+- 워치: 자유 러닝·30분·5km, Ongoing Activity·Ambient 표시, 기기가 지원하는 상세 센서와 오프라인 완료 기록 대기열
+- 저장 형식: Room v7, 복원용 JSON v5, 읽기 전용 분석 영역 v3. 이전 백업·DB는 비파괴 호환
 
-- `app/src/main/java/com/hanshin/healthtask/data`: Room 저장소, seed, JSON 백업
-- `app/src/main/java/com/hanshin/healthtask/domain`: 목표·순서·중첩·세션 상태 규칙
-- `app/src/main/java/com/hanshin/healthtask/health`: Health Connect 경계와 동기화
-- `app/src/main/java/com/hanshin/healthtask/ui`: Compose 화면과 상태
-- `app/src/test`: 순수 단위 테스트
-- `app/src/androidTest`: Room, legacy import, Health Connect 재시도 테스트
-- `shared`: 휴대폰/워치 Data Layer 프로토콜과 경과 시간 규칙
-- `wear/src/main/java`: Watch9 Compose UI, DataStore, Data Layer, Health Services
-- `app/src/main/res/raw`: 제작 동작 13종의 정면·측면 오프라인 3D 모션 MP4 26개
-- `design/motion` 및 `tools/blender`: 최종 Blender 원본과 재생성 스크립트
-- `tools/verify_motion_videos.py`: 26개 MP4의 파일명·H.264·720p·8초·240프레임·무음 규격 검사
+## 코드 위치
 
-## 남은 실환경 작업
+- `app/src/main/java/com/hanshin/healthtask/data`: Room 저장·백업, 분석 내보내기, CSV 저장, 센서 청크 저장
+- `app/src/main/java/com/hanshin/healthtask/domain`: 러닝 분류·세션 상태·체성분 지표와 기존 자료 호환 모델
+- `app/src/main/java/com/hanshin/healthtask/health`: Health Connect 동기화, 인바디 CSV·캡처 파서
+- `app/src/main/java/com/hanshin/healthtask/running`: 휴대폰 GPS 서비스·경로·지도·메모리 전용 샘플 경로
+- `app/src/main/java/com/hanshin/healthtask/ui`: Compose 화면·인바디 그래프·표시 설정
+- `app/src/main/java/com/hanshin/healthtask/wear`: 워치 시작 요청, 완료 기록 가져오기와 재조회
+- `shared/src/main`: Data Layer 프로토콜, 러닝 프리셋·시간 규칙, 센서 시계열·요약
+- `wear/src/main`: 워치 UI·Ambient, Health Services, GPS, 영속 센서 저널·복구·완료 전송
+- `app/schemas`: Room v1~v7 스키마. 이전 버전 파일도 유지
+- 각 모듈의 `src/test`, 휴대폰·워치의 `src/androidTest`: 단위 및 기기 계측 검증
 
-1. USB 디버깅을 켠 Android 14+ 삼성 휴대폰을 연결합니다.
-2. Galaxy Watch9을 Wi-Fi 디버깅으로 페어링합니다.
-3. `./gradlew connectedDebugAndroidTest`를 실행합니다.
-4. 휴대폰과 워치에 각각 `app-release.apk`, `wear-release.apk`를 설치합니다.
-5. Watch9에서 활동 인식·심박·알림 권한을 허용하고 센서 측정을 확인합니다.
-6. 휴대폰 연결을 끊은 채 운동을 완료한 뒤 재연결해 Room 전달과 Health Connect 쓰기를 확인합니다.
-7. 기존 PWA JSON 개수와 동일 서명 업데이트 후 Room 유지 여부를 확인합니다.
-8. `~/.android/healthtask-release.jks`와 `~/.gradle/healthtask-signing.properties`를 안전한 별도 위치에 백업합니다.
+## 데이터 보존 원칙
 
-거리와 칼로리는 현재 합의한 제한 권한에 포함되지 않으므로 Health Connect 외부 기록에서 값이 없을 수 있습니다. 앱은 해당 값을 nullable로 유지하며 시간과 원본 앱 표시는 항상 제공합니다.
+- 근력 화면·계획·가이드는 제거했지만 과거 DB 테이블·백업·프로토콜 필드는 보존합니다. 신규 화면·통계·Health Connect 업로드에는 섞지 않습니다.
+- 워치 완료 기록은 gzip Asset으로 전송하고 휴대폰 DB 저장 성공 후에만 확인 삭제합니다. 상세 시계열은 32,000자 청크로 저장하며 휴대폰 경로와 워치 센서를 병합합니다.
+- CSV 원본 현지 시각·시간대·UTC·장비·전체 열을 보존합니다. 같은 시각·장비만 중복으로 보고 누락 항목을 보충하며 기존 충돌 값은 덮어쓰지 않습니다.
+- 인바디 변화 그래프는 **측정 순서 등간격**입니다. 최근 10회/전체, 같은 날 여러 점, 항목 표시 설정을 지원합니다. 예전 1/3/6개월·하루 대표값 화면으로 되돌리지 않습니다.
+- Health Connect는 삼성/NRC 러닝 및 삼성 체중·체지방을 읽고 로컬 러닝 세션·거리를 씁니다. 상세 센서·경로·CSV 원본을 Health Connect에 쓰지는 않습니다.
+- 테스트 예시는 합성 값과 테스트용 저장소를 사용합니다. 실제 사용자의 건강 파일·GPS 기록·키스토어·비밀번호를 커밋하지 않습니다.
 
-제작된 사람형 3D 가이드는 일반 운동 10종과 타바타 피니셔의 로우 임팩트 버피·마운틴 클라이머·맨몸 스쿼트까지 총 13개 동작입니다. 각 동작은 정면·측면 자체 렌더 MP4를 앱에 포함하며 Media3 1.11.0이 무음 반복 재생합니다. 타바타 가이드에서는 동작과 시점을 각각 선택하고, 20초/10초 × 8라운드 진행은 기존 휴대폰·워치 타이머가 담당합니다. 나머지 운동은 기존 SVG 가이드를 유지합니다. 사람형과 시스템 자산은 MakeHuman Community의 CC0 자산 및 MPFB 2.0.17을 사용했고, 자세·장비·애니메이션은 프로젝트 안에서 제작했습니다.
+## 검증 및 배포 현황
 
-푸시업은 사용자 지적에 따라 손끝 지지에서 손바닥 전체 지지로 보정했습니다. 검증 시 손가락과 숨겨진 헬퍼를 손바닥 영역에서 제외하고 실제 뒤꿈치·양옆 패드와 다섯 손가락을 각각 검사합니다. 양손 손바닥 전용 접촉 범위는 약 57 × 73mm이며 241프레임 접촉·관통·미끄러짐 검사를 통과했습니다. 2026-08-31 사용자가 손바닥 보정본을 시각 검수 후 승인했으며, 현재 정면·측면 영상과 Blender 원본을 승인 최종본으로 유지합니다. 다음 운동 제작은 추가 요청에 따라 진행합니다.
+2026-09-25 실제 휴대폰 SM-F766N과 워치 SM-L350을 기존 앱 삭제 없이 2.0.0으로 업데이트했고, 설치 버전·최초 설치 시각 유지·앱 실행을 확인했습니다. 이는 당일의 확인 기록이며 현재 연결이나 실제 러닝 품질을 보장하지 않습니다.
 
-새 3D 운동을 제작하거나 기존 모션을 수정할 때는 `docs/MOTION_QUALITY_STANDARD.md`를 완료 조건으로 사용합니다. 특히 장비를 잡는 손은 주먹 포즈로 대체하지 않고 손가락 뿌리 축을 장비와 정렬한 뒤 관절별 접촉을 계산하며, 정면·사선·후면 근접 렌더까지 통과해야 합니다. 현재 스쿼트의 `design/motion/previews/human_squat_grip_{front,angle,rear}.png`가 최소 시각 품질 기준입니다.
+이전 에뮬레이터 계측 검증은 휴대폰 59개, 워치 7개가 통과했습니다. 이번 소스 정리 시점의 단위 테스트·빌드·lint 결과는 [작업 로그](WORK_PROGRESS.md)의 최신 날짜 항목을 확인하세요. 실행 방법과 서명 절차는 [README](README.md)에 있습니다.
+
+계측 테스트는 개인 기록이 없는 전용 에뮬레이터에만 실행합니다. 실제 기기 업데이트 전에는 진행 중인 운동이 없는지 확인하고 동일 서명의 `install -r`를 사용합니다. 서명 오류를 앱 삭제·데이터 초기화로 해결하지 않습니다. 구버전 앱 다운그레이드도 하지 않습니다.
+
+## 남은 실환경 검증
+
+1. 사용자의 실제 야외 러닝에서 GPS·심박·배터리·화면 유지와 기기별 지원 센서를 확인합니다.
+2. 휴대폰 연결 없이 워치에서 러닝을 완료한 뒤 재연결하여 경로·센서가 한 번만 저장되는지 확인합니다.
+3. 휴대폰 Health Connect 권한과 삼성/NRC의 실제 제공 범위를 확인하고 중복 제외·재시도를 검증합니다.
+4. 실제 장기간 기록 규모에서 백업 내보내기와 별도 테스트 환경의 복원 건수·원본 일치를 확인합니다.
+5. 개인 릴리스 키와 설정을 별도 안전한 위치에 백업합니다. 키 파일 자체는 Git에 넣지 않습니다.
+
+## 이전 근력운동 제작 자료
+
+MP4 26개와 SVG 16개는 [legacy/strength-assets](legacy/strength-assets/README.md)에 이동했으며 APK에 포함하지 않습니다. Media3 의존성도 제거했습니다. `design/motion`, `tools/blender`, `docs/motions`와 모션 품질·제작 문서는 과거 제작 자료로 보존하며 현재 앱 기능이나 진행 중인 제작 계획이 아닙니다. 원본 재생성 스크립트에는 이전 리소스 경로가 남아 있으므로 실행 전에 출력 위치를 확인하세요.

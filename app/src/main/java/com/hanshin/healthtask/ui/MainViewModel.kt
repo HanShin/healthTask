@@ -2,410 +2,147 @@ package com.hanshin.healthtask.ui
 
 import android.app.Application
 import android.content.ContentResolver
-import android.media.RingtoneManager
 import android.net.Uri
-import android.os.VibrationEffect
-import android.os.VibratorManager
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.hanshin.healthtask.HealthTaskApplication
 import com.hanshin.healthtask.data.ImportReport
 import com.hanshin.healthtask.data.RunningPreferences
+import com.hanshin.healthtask.data.InBodyGraphPreferences
 import com.hanshin.healthtask.data.SyncPreferences
-import com.hanshin.healthtask.data.db.ExerciseEntity
 import com.hanshin.healthtask.data.db.HealthMeasurementEntity
-import com.hanshin.healthtask.data.db.PlanSlotEntity
-import com.hanshin.healthtask.data.db.ProfileEntity
-import com.hanshin.healthtask.data.db.RoutineWithItems
 import com.hanshin.healthtask.data.db.SamsungWorkoutLinkEntity
-import com.hanshin.healthtask.data.db.SetRecordEntity
-import com.hanshin.healthtask.data.db.TrainingPlanWithSlots
-import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionWithItems
 import com.hanshin.healthtask.domain.HealthMetricType
-import com.hanshin.healthtask.domain.PlannedWorkoutType
-import com.hanshin.healthtask.domain.TrainingGoalType
-import com.hanshin.healthtask.domain.WeeklyProgress
-import com.hanshin.healthtask.domain.WeeklyPlanProgress
 import com.hanshin.healthtask.domain.WorkoutSource
-import com.hanshin.healthtask.domain.streakDays
-import com.hanshin.healthtask.domain.nextRoutineIndex
-import com.hanshin.healthtask.domain.nextPlanSlot
-import com.hanshin.healthtask.domain.weeklyPlanProgress
-import com.hanshin.healthtask.domain.weeklyGoalCount
 import com.hanshin.healthtask.health.HealthConnectStatus
 import com.hanshin.healthtask.health.InBodyScreenshotReader
 import com.hanshin.healthtask.health.InBodyScreenshotResult
+import com.hanshin.healthtask.health.InBodyCsvParser
+import com.hanshin.healthtask.health.InBodyCsvPreview
+import com.hanshin.healthtask.data.db.InBodyRecordEntity
+import android.provider.OpenableColumns
+import java.io.ByteArrayOutputStream
 import com.hanshin.healthtask.health.SyncResult
 import com.hanshin.healthtask.running.RunningPhase
 import com.hanshin.healthtask.running.RunningLapCodec
 import com.hanshin.healthtask.running.RunningRouteCodec
 import com.hanshin.healthtask.running.RunningTrackingService
 import com.hanshin.healthtask.running.RunningUiState
-import com.hanshin.healthtask.shared.DEFAULT_REST_TIMER_SECONDS
-import com.hanshin.healthtask.shared.TABATA_EXERCISE_ID
-import com.hanshin.healthtask.shared.TABATA_TOTAL_SECONDS
-import com.hanshin.healthtask.shared.TabataPhase
-import com.hanshin.healthtask.shared.TabataTimer
-import com.hanshin.healthtask.shared.TabataTimerState
 import com.hanshin.healthtask.shared.WearStartWorkoutRequest
 import com.hanshin.healthtask.shared.WearQuickRunPreset
-import com.hanshin.healthtask.shared.remainingRestSeconds
 import com.hanshin.healthtask.shared.toRoutinePayload
-import com.hanshin.healthtask.wear.buildWearRoutinePayload
 import java.time.LocalDate
 import java.util.UUID
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
-data class RestTimerUiState(
-    val totalSeconds: Int = DEFAULT_REST_TIMER_SECONDS,
-    val remainingSeconds: Int = 0,
-    val endsAt: Long? = null,
-) {
-    val isRunning: Boolean get() = remainingSeconds > 0 && endsAt != null
-}
+import com.hanshin.healthtask.domain.visibleRunningSessions
 
 sealed interface InBodyImportUiState {
     data object Idle : InBodyImportUiState
     data object Reading : InBodyImportUiState
     data class Review(val result: InBodyScreenshotResult) : InBodyImportUiState
+    data class CsvReview(val result: InBodyCsvPreview) : InBodyImportUiState
+    data object Saving : InBodyImportUiState
 }
 
 data class MainUiState(
-    val profile: ProfileEntity? = null,
-    val exercises: List<ExerciseEntity> = emptyList(),
-    val routines: List<RoutineWithItems> = emptyList(),
-    val trainingPlans: List<TrainingPlanWithSlots> = emptyList(),
     val sessions: List<WorkoutSessionWithItems> = emptyList(),
     val health: List<HealthMeasurementEntity> = emptyList(),
+    val inBodyRecords: List<InBodyRecordEntity> = emptyList(),
     val links: List<SamsungWorkoutLinkEntity> = emptyList(),
     val syncPreferences: SyncPreferences = SyncPreferences(),
-    val restTimerSeconds: Int = DEFAULT_REST_TIMER_SECONDS,
     val runningPreferences: RunningPreferences = RunningPreferences(),
+    val inBodyGraphPreferences: InBodyGraphPreferences = InBodyGraphPreferences(),
     val healthStatus: HealthConnectStatus = HealthConnectStatus.AVAILABLE,
-    val restTimer: RestTimerUiState = RestTimerUiState(),
-    val tabataTimer: TabataTimerState = TabataTimerState(),
     val running: RunningUiState = RunningUiState(),
     val message: String? = null,
-    val selectedRunPlanSlotId: String? = null,
     val inBodyImport: InBodyImportUiState = InBodyImportUiState.Idle,
+    val loaded: Boolean = false,
 ) {
-    val progress: WeeklyProgress
-        get() = WeeklyProgress(
-            completed = weeklyGoalCount(sessions.map { it.session }, links),
-            goal = profile?.workoutsPerWeek ?: 3,
-            streakDays = streakDays(sessions.map { it.session }, links),
-        )
-
-    val activeSession: WorkoutSessionWithItems?
-        get() = sessions.firstOrNull { it.session.status.name == "ACTIVE" }
-
-    val nextRoutine: RoutineWithItems?
-        get() {
-            if (routines.isEmpty()) return null
-            val index = nextRoutineIndex(sessions.map { it.session }, routines.size) ?: return null
-            return routines.sortedWith(compareBy({ it.routine.createdAt }, { it.routine.id }))[index]
-        }
-
-    val activeTrainingPlan: TrainingPlanWithSlots?
-        get() = trainingPlans.firstOrNull { it.plan.isActive }
-
-    val planProgress: WeeklyPlanProgress?
-        get() = activeTrainingPlan?.let { weeklyPlanProgress(it.slots, sessions.map { session -> session.session }) }
-
-    val todayPlanSlot: PlanSlotEntity?
-        get() = activeTrainingPlan?.let { nextPlanSlot(it.slots, sessions.map { session -> session.session }) }
-
-    val currentRunPlanSlot: PlanSlotEntity?
-        get() {
-            val slotId = running.plannedSlotId ?: selectedRunPlanSlotId ?: return null
-            return trainingPlans.asSequence().flatMap { it.slots.asSequence() }.firstOrNull { it.id == slotId }
-        }
+    val runs: List<WorkoutSessionWithItems> get() = visibleRunningSessions(sessions, links)
 }
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as HealthTaskApplication
     private val repository = app.repository
     private val healthStatus = MutableStateFlow(HealthConnectStatus.AVAILABLE)
-    private val restTimer = MutableStateFlow(RestTimerUiState())
-    private val tabataTimer = MutableStateFlow(TabataTimerState())
     private val message = MutableStateFlow<String?>(null)
-    private val selectedRunPlanSlotId = MutableStateFlow<String?>(null)
     private val inBodyImport = MutableStateFlow<InBodyImportUiState>(InBodyImportUiState.Idle)
+    private val loaded = MutableStateFlow(false)
     private val inBodyScreenshotReader = InBodyScreenshotReader(application)
-    private var restTimerJob: Job? = null
-    private var tabataTimerJob: Job? = null
 
     val state: StateFlow<MainUiState> = combine(
-        repository.profile,
-        repository.exercises,
-        repository.routines,
-        repository.trainingPlans,
-        repository.sessions,
-        repository.healthMeasurements,
-        repository.workoutLinks,
-        app.preferences.sync,
-        app.preferences.restTimerSeconds,
-        app.preferences.running,
-        healthStatus,
-        restTimer,
-        tabataTimer,
-        app.runningTracker.state,
-        message,
-        selectedRunPlanSlotId,
-        inBodyImport,
+        repository.sessions, repository.healthMeasurements, repository.workoutLinks,
+        app.preferences.sync, app.preferences.running, healthStatus, app.runningTracker.state,
+        message, inBodyImport, loaded, repository.inBodyRecords, app.preferences.inBodyGraphs,
     ) { values ->
         @Suppress("UNCHECKED_CAST")
         MainUiState(
-            profile = values[0] as ProfileEntity?,
-            exercises = values[1] as List<ExerciseEntity>,
-            routines = values[2] as List<RoutineWithItems>,
-            trainingPlans = values[3] as List<TrainingPlanWithSlots>,
-            sessions = values[4] as List<WorkoutSessionWithItems>,
-            health = values[5] as List<HealthMeasurementEntity>,
-            links = values[6] as List<SamsungWorkoutLinkEntity>,
-            syncPreferences = values[7] as SyncPreferences,
-            restTimerSeconds = values[8] as Int,
-            runningPreferences = values[9] as RunningPreferences,
-            healthStatus = values[10] as HealthConnectStatus,
-            restTimer = values[11] as RestTimerUiState,
-            tabataTimer = values[12] as TabataTimerState,
-            running = values[13] as RunningUiState,
-            message = values[14] as String?,
-            selectedRunPlanSlotId = values[15] as String?,
-            inBodyImport = values[16] as InBodyImportUiState,
+            sessions = values[0] as List<WorkoutSessionWithItems>,
+            health = values[1] as List<HealthMeasurementEntity>,
+            links = values[2] as List<SamsungWorkoutLinkEntity>,
+            syncPreferences = values[3] as SyncPreferences,
+            runningPreferences = values[4] as RunningPreferences,
+            healthStatus = values[5] as HealthConnectStatus,
+            running = values[6] as RunningUiState,
+            message = values[7] as String?,
+            inBodyImport = values[8] as InBodyImportUiState,
+            loaded = values[9] as Boolean,
+            inBodyRecords = values[10] as List<InBodyRecordEntity>,
+            inBodyGraphPreferences = values[11] as InBodyGraphPreferences,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
     val requiredPermissions get() = app.healthConnect.requiredPermissions
 
+    fun setInBodyGraphPreferences(value: InBodyGraphPreferences) = launchAction { app.preferences.setInBodyGraphs(value) }
+
     init {
         viewModelScope.launch {
             repository.initialize()
+            loaded.value = true
             refreshConnectionStatuses()
             if (app.preferences.sync.first().enabled) sync()
         }
         viewModelScope.launch {
-            combine(
-                repository.routines,
-                repository.trainingPlans,
-                repository.sessions,
-                repository.exercises,
-                app.preferences.restTimerSeconds,
-            ) { routines, plans, sessions, exercises, restTimerSeconds ->
-                val activePlan = plans.firstOrNull { it.plan.isActive }
-                val plannedSlot = activePlan?.let { nextPlanSlot(it.slots, sessions.map { session -> session.session }) }
-                val plannedRoutine = plannedSlot
-                    ?.takeIf { it.workoutType == PlannedWorkoutType.STRENGTH }
-                    ?.routineId
-                    ?.let { id -> routines.firstOrNull { it.routine.id == id } }
-                val fallbackRoutine = if (activePlan == null) {
-                    val sorted = routines.sortedWith(compareBy({ it.routine.createdAt }, { it.routine.id }))
-                    nextRoutineIndex(sessions.map { it.session }, sorted.size)?.let(sorted::get)
-                } else null
-                WatchSyncState(
-                    plannedRoutine ?: fallbackRoutine,
-                    plannedSlot,
-                    exercises,
-                    sessions,
-                    restTimerSeconds,
-                )
-            }.collectLatest { watchState ->
-                runCatching {
-                    app.phoneWatchGateway.publishRoutine(
-                        watchState.routine,
-                        watchState.plannedSlot,
-                        watchState.exercises,
-                        watchState.sessions,
-                        watchState.restTimerSeconds,
-                    )
-                }
-            }
+            runCatching { app.phoneWatchGateway.publishRunningPreset() }
+            runCatching { app.watchWorkoutImporter.importPending() }
         }
     }
 
-    fun finishOnboarding(goal: Int, templates: Boolean) = launchAction {
-        repository.finishOnboarding(goal, templates)
-    }
-
-    fun saveRoutine(id: String?, name: String, exerciseIds: List<String>) = launchAction {
-        repository.saveRoutine(id, name, exerciseIds)
-    }
-
-    fun deleteRoutine(id: String) = launchAction { repository.deleteRoutine(id) }
-    fun installTemplate(id: String) = launchAction { repository.installTemplate(id) }
-
-    fun rebuildTrainingPlan(goalType: TrainingGoalType) = launchAction {
-        repository.rebuildTrainingPlan(goalType)
-        selectedRunPlanSlotId.value = null
-        message.value = "주간 계획을 새로 구성했습니다."
-    }
-
-    fun startSession(routineId: String, planSlotId: String? = null) = launchAction {
-        stopRestTimer()
-        stopTabataTimer()
-        val sessionId = repository.startSession(routineId, planSlotId)
-        val current = state.value
-        val routine = current.routines.firstOrNull { it.routine.id == routineId }
-        val plannedSlot = planSlotId?.let { id ->
-            current.trainingPlans.asSequence()
-                .flatMap { it.slots.asSequence() }
-                .firstOrNull { it.id == id }
-        }
-        val payload = buildWearRoutinePayload(
-            routine = routine,
-            plannedSlot = plannedSlot,
-            exercises = current.exercises,
-            sessions = current.sessions,
-            restTimerSeconds = current.restTimerSeconds,
-        )
-        if (payload != null) {
-            val requestedAt = System.currentTimeMillis()
-            val watchOpened = app.phoneWatchGateway.requestWorkoutStart(
-                WearStartWorkoutRequest(
-                    requestId = "start-$sessionId",
-                    sessionId = sessionId,
-                    routine = payload,
-                    requestedAt = requestedAt,
-                    expiresAt = requestedAt + WATCH_START_REQUEST_TTL_MILLIS,
-                ),
-            )
-            if (!watchOpened) {
-                message.value = "폰 운동은 시작했습니다. 연결된 워치에서는 운동 앱을 직접 열어 주세요."
-            }
-        }
-    }
-
-    fun selectPlanSlot(slot: PlanSlotEntity) {
-        if (slot.workoutType == PlannedWorkoutType.STRENGTH) {
-            val routineId = slot.routineId
-            if (routineId == null) {
-                message.value = "먼저 근력 루틴을 만든 뒤 계획을 다시 구성해 주세요."
-            } else {
-                startSession(routineId, slot.id)
-            }
-        } else {
-            if (state.value.running.phase == RunningPhase.COMPLETED) app.runningTracker.reset()
-            selectedRunPlanSlotId.value = slot.id
-        }
-    }
-    fun updateSet(set: SetRecordEntity) = launchAction { repository.updateSet(set) }
-    fun setSetCompleted(set: SetRecordEntity, completed: Boolean) = launchAction {
-        repository.updateSet(set.copy(completed = completed))
-        if (completed && !set.completed) startRestTimer()
-    }
-    fun updateWorkoutItem(item: WorkoutItemEntity) = launchAction { repository.updateWorkoutItem(item) }
-    fun startTabata(item: WorkoutItemEntity) {
-        if (item.exerciseId != TABATA_EXERCISE_ID) return
-        tabataTimerJob?.cancel()
-        tabataTimer.value = TabataTimer.start(TabataTimer.ready(item.id))
-        launchAction { repository.updateWorkoutItem(item.copy(durationMin = null, distanceKm = null)) }
-        signalTabataPhase(TabataPhase.WORK)
-        tabataTimerJob = viewModelScope.launch {
-            while (true) {
-                delay(1_000L)
-                val before = tabataTimer.value
-                val after = TabataTimer.tick(before)
-                tabataTimer.value = after
-                if (after.phase != before.phase) signalTabataPhase(after.phase)
-                if (after.isCompleted) {
-                    state.value.activeSession?.items
-                        ?.firstOrNull { it.item.id == after.targetId }
-                        ?.item
-                        ?.let { repository.updateWorkoutItem(it.copy(durationMin = TABATA_TOTAL_SECONDS / 60.0)) }
-                    message.value = "타바타 8라운드를 완료했습니다."
-                    tabataTimerJob = null
-                    return@launch
-                }
-            }
-        }
-    }
-
-    fun pauseTabata() {
-        tabataTimer.value = TabataTimer.pause(tabataTimer.value)
-    }
-
-    fun resumeTabata() {
-        tabataTimer.value = TabataTimer.resume(tabataTimer.value)
-    }
-
-    fun resetTabata(item: WorkoutItemEntity) {
-        if (tabataTimer.value.targetId != item.id && item.exerciseId != TABATA_EXERCISE_ID) return
-        stopTabataTimer(item.id)
-        launchAction { repository.updateWorkoutItem(item.copy(durationMin = null, distanceKm = null)) }
-    }
-
-    fun finishSession(id: String) = launchAction {
-        repository.finishSession(id)
-        stopRestTimer()
-        stopTabataTimer()
-        sync()
-    }
     fun deleteSession(id: String) = launchAction { repository.deleteSession(id) }
 
-    fun startRun(planSlotId: String? = selectedRunPlanSlotId.value) {
-        if (state.value.activeSession != null) {
-            message.value = "진행 중인 근력운동을 먼저 완료해 주세요."
-            return
-        }
+    fun startRun() {
         if (app.runningTracker.state.value.isActive) return
         val sessionId = "run-${UUID.randomUUID()}"
-        app.runningTracker.start(sessionId, planSlotId)
-        val serviceStarted = runCatching {
-            RunningTrackingService.start(app, sessionId, planSlotId)
-        }.getOrNull() != null
+        app.runningTracker.start(sessionId)
+        val serviceStarted = runCatching { RunningTrackingService.start(app, sessionId) }.getOrNull() != null
         if (!serviceStarted) {
             if (app.runningTracker.state.value.sessionId == sessionId) app.runningTracker.reset()
             message.value = "러닝 기록 서비스를 시작하지 못했습니다. 다시 시도해 주세요."
             return
         }
-        val current = state.value
         val requestedAt = System.currentTimeMillis()
         viewModelScope.launch {
-            runCatching {
-                val payload = if (planSlotId == null) {
-                    WearQuickRunPreset.FREE_RUN.toRoutinePayload(updatedAt = requestedAt)
-                } else {
-                    buildWearRoutinePayload(
-                        routine = null,
-                        plannedSlot = repository.getPlanSlot(planSlotId),
-                        exercises = current.exercises,
-                        sessions = current.sessions,
-                        restTimerSeconds = current.restTimerSeconds,
-                        updatedAt = requestedAt,
-                    )
-                }
-                val watchOpened = payload != null && app.phoneWatchGateway.requestWorkoutStart(
-                        WearStartWorkoutRequest(
-                            requestId = "start-$sessionId",
-                            sessionId = sessionId,
-                            routine = payload,
-                            requestedAt = requestedAt,
-                            expiresAt = requestedAt + WATCH_START_REQUEST_TTL_MILLIS,
-                        ),
-                    )
-                if (!watchOpened) {
-                    message.value = "러닝은 시작했습니다. 연결된 워치에서는 운동 앱을 직접 열어 주세요."
-                }
-            }.onFailure {
-                message.value = "러닝은 시작했지만 워치 시작 요청을 만들지 못했습니다."
-            }
+            val watchOpened = runCatching {
+                app.phoneWatchGateway.requestWorkoutStart(WearStartWorkoutRequest(
+                    requestId = "start-$sessionId", sessionId = sessionId,
+                    routine = WearQuickRunPreset.FREE_RUN.toRoutinePayload(updatedAt = requestedAt),
+                    requestedAt = requestedAt, expiresAt = requestedAt + WATCH_START_REQUEST_TTL_MILLIS,
+                ))
+            }.getOrDefault(false)
+            if (!watchOpened) message.value = "러닝을 시작했습니다. 워치가 연결되어 있으면 워치 앱에서도 확인해 주세요."
         }
-    }
-
-    fun startFreeRun() {
-        selectedRunPlanSlotId.value = null
-        startRun(null)
     }
 
     fun pauseRun() {
@@ -430,7 +167,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 lapData = RunningLapCodec.encode(completed.laps).takeIf { it.isNotBlank() },
                 planSlotId = completed.plannedSlotId,
             )
-            selectedRunPlanSlotId.value = null
             message.value = "러닝을 저장했습니다."
             sync()
         }
@@ -439,7 +175,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun newRun() {
         if (state.value.running.phase == RunningPhase.COMPLETED) {
             app.runningTracker.reset()
-            selectedRunPlanSlotId.value = null
         }
     }
 
@@ -447,8 +182,61 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         message.value = value
     }
 
-    fun saveHealth(type: HealthMetricType, value: Double) = launchAction {
-        repository.saveManualHealthMetric(LocalDate.now(), type, value)
+    fun saveHealth(date: LocalDate, type: HealthMetricType, value: Double, existingId: String? = null) = launchAction {
+        repository.saveBodyMeasurement(date, type, value, existingId)
+    }
+
+    fun deleteHealth(id: String) = launchAction { repository.deleteBodyMeasurement(id) }
+
+    fun deleteInBodyRecord(id: String) = launchAction { repository.inBodyCsv.delete(id) }
+
+    fun importInBodyCsv(uri: Uri) {
+        if (inBodyImport.value != InBodyImportUiState.Idle) return
+        inBodyImport.value = InBodyImportUiState.Reading
+        viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val resolver = app.contentResolver
+                    val fileName = runCatching {
+                        resolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                            if (it.moveToFirst()) it.getString(0) else null
+                        }
+                    }.getOrNull() ?: "InBody.csv"
+                    val bytes = resolver.openInputStream(uri)?.use { input ->
+                        val output = ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val size = input.read(buffer)
+                            if (size == -1) break
+                            require(output.size() + size <= InBodyCsvParser.MAX_BYTES) { "CSV 파일은 5MB 이하로 선택해 주세요." }
+                            output.write(buffer, 0, size)
+                        }
+                        output.toByteArray()
+                    } ?: error("CSV 파일을 열 수 없습니다.")
+                    InBodyCsvParser.parse(InBodyCsvParser.decode(bytes), fileName)
+                }
+            }.onSuccess { inBodyImport.value = InBodyImportUiState.CsvReview(it) }
+                .onFailure {
+                    inBodyImport.value = InBodyImportUiState.Idle
+                    message.value = it.message ?: "CSV를 읽지 못했습니다."
+                }
+        }
+    }
+
+    fun saveInBodyCsv(preview: InBodyCsvPreview) {
+        if (inBodyImport.value !is InBodyImportUiState.CsvReview) return
+        inBodyImport.value = InBodyImportUiState.Saving
+        viewModelScope.launch {
+            runCatching { withContext(Dispatchers.IO) { repository.inBodyCsv.save(preview) } }
+                .onSuccess { report ->
+                    inBodyImport.value = InBodyImportUiState.Idle
+                    message.value = "새 기록 ${report.inserted}건 · 추가 항목 반영 ${report.expanded}건 · 중복 ${report.skipped}건" +
+                        if (report.conflicts > 0) " · 값이 다른 ${report.conflicts}개 항목은 기존 값을 유지했습니다." else "을 처리했습니다."
+                }.onFailure {
+                    inBodyImport.value = InBodyImportUiState.CsvReview(preview)
+                    message.value = it.message ?: "저장하지 못했습니다. 다시 시도해 주세요."
+                }
+        }
     }
 
     fun importInBodyScreenshot(uri: Uri) {
@@ -485,15 +273,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         message.value = "인바디 수치 ${values.size}개를 저장했습니다."
     }
 
-    fun setGoal(value: Int) = launchAction { repository.updateProfileGoal(value) }
-
-    fun setRestTimerSeconds(seconds: Int) = launchAction {
-        app.preferences.setRestTimerSeconds(seconds)
-        if (!restTimer.value.isRunning) {
-            restTimer.value = RestTimerUiState(totalSeconds = seconds)
-        }
-    }
-
     fun setRunningAutoPauseEnabled(enabled: Boolean) = launchAction {
         app.runningTracker.setAutoPauseEnabled(enabled)
         app.preferences.setRunningAutoPauseEnabled(enabled)
@@ -502,20 +281,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun setRunningVoiceGuidanceEnabled(enabled: Boolean) = launchAction {
         app.preferences.setRunningVoiceGuidanceEnabled(enabled)
     }
-
-    fun addRestTime(seconds: Int = 30) {
-        val current = restTimer.value
-        val currentEnd = current.endsAt ?: return
-        if (!current.isRunning) return
-        val newEnd = maxOf(currentEnd, System.currentTimeMillis()) + seconds * 1_000L
-        restTimer.value = current.copy(
-            totalSeconds = current.totalSeconds + seconds,
-            remainingSeconds = remainingRestSeconds(newEnd),
-            endsAt = newEnd,
-        )
-    }
-
-    fun skipRestTimer() = stopRestTimer()
 
     fun setSyncEnabled(enabled: Boolean) = launchAction {
         app.preferences.setSyncEnabled(enabled)
@@ -539,9 +304,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun exportBackup(resolver: ContentResolver, uri: Uri) = launchAction {
         val json = app.backupCodec.export()
-        resolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json) }
-            ?: error("백업 파일을 열 수 없습니다.")
-        message.value = "schemaVersion 3 백업을 저장했습니다."
+        withContext(Dispatchers.IO) {
+            resolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(json) }
+                ?: error("백업 파일을 열 수 없습니다.")
+        }
+        message.value = "상세 분석 데이터와 복원용 백업을 함께 저장했습니다."
     }
 
     fun importBackup(resolver: ContentResolver, uri: Uri) = launchAction {
@@ -557,67 +324,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         healthStatus.value = app.healthConnect.status()
     }
 
-    private fun startRestTimer() {
-        restTimerJob?.cancel()
-        val totalSeconds = state.value.restTimerSeconds.coerceIn(15, 600)
-        val endsAt = System.currentTimeMillis() + totalSeconds * 1_000L
-        restTimer.value = RestTimerUiState(totalSeconds, totalSeconds, endsAt)
-        restTimerJob = viewModelScope.launch {
-            while (true) {
-                delay(250L)
-                val current = restTimer.value
-                val remaining = remainingRestSeconds(current.endsAt)
-                if (remaining <= 0) {
-                    restTimer.value = RestTimerUiState(totalSeconds = current.totalSeconds)
-                    signalRestComplete()
-                    message.value = "휴식 끝! 다음 세트를 시작하세요."
-                    return@launch
-                }
-                if (remaining != current.remainingSeconds) {
-                    restTimer.value = current.copy(remainingSeconds = remaining)
-                }
-            }
-        }
-    }
-
-    private fun stopRestTimer() {
-        restTimerJob?.cancel()
-        restTimerJob = null
-        restTimer.value = RestTimerUiState(totalSeconds = state.value.restTimerSeconds)
-    }
-
-    private fun stopTabataTimer(targetId: String? = null) {
-        tabataTimerJob?.cancel()
-        tabataTimerJob = null
-        tabataTimer.value = targetId?.let { TabataTimer.ready(it) } ?: TabataTimerState()
-    }
-
-    private fun signalTabataPhase(phase: TabataPhase) {
-        val pattern = when (phase) {
-            TabataPhase.WORK -> longArrayOf(0L, 180L, 80L, 180L)
-            TabataPhase.REST -> longArrayOf(0L, 280L)
-            TabataPhase.COMPLETED -> longArrayOf(0L, 250L, 120L, 250L, 120L, 450L)
-            else -> return
-        }
-        app.getSystemService(VibratorManager::class.java)?.defaultVibrator?.vibrate(
-            VibrationEffect.createWaveform(pattern, -1),
-        )
-        if (phase == TabataPhase.COMPLETED) {
-            RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)?.let { uri ->
-                RingtoneManager.getRingtone(app, uri)?.play()
-            }
-        }
-    }
-
-    private fun signalRestComplete() {
-        app.getSystemService(VibratorManager::class.java)?.defaultVibrator?.vibrate(
-            VibrationEffect.createWaveform(longArrayOf(0L, 250L, 150L, 350L), -1),
-        )
-        RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)?.let { uri ->
-            RingtoneManager.getRingtone(app, uri)?.play()
-        }
-    }
-
     private fun launchAction(showSuccess: Boolean = false, action: suspend () -> Unit) {
         viewModelScope.launch {
             runCatching { action() }.onFailure { message.value = it.message ?: "작업에 실패했습니다." }
@@ -626,22 +332,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 }
 
-private data class WatchSyncState(
-    val routine: RoutineWithItems?,
-    val plannedSlot: PlanSlotEntity?,
-    val exercises: List<ExerciseEntity>,
-    val sessions: List<WorkoutSessionWithItems>,
-    val restTimerSeconds: Int,
-)
-
 private const val WATCH_START_REQUEST_TTL_MILLIS = 2 * 60 * 1_000L
 
-private fun SyncResult.message(): String = error ?: "동기화 완료: 운동 ${downloadedWorkouts}개, 측정 ${downloadedMeasurements}개, 연결 ${linked}개"
+private fun SyncResult.message(): String = error ?: "동기화 완료: 러닝 ${downloadedWorkouts}개, 체성분 ${downloadedMeasurements}개"
 private fun ImportReport.message(): String =
-    "백업(v$schemaVersion)을 불러왔습니다: 계획 ${trainingPlans}개, 루틴 ${routines}개, 운동 ${sessions}개, 건강 ${healthMeasurements}개"
+    "백업(v$schemaVersion)을 불러왔습니다: 기록 ${sessions}개, 체성분 ${healthMeasurements}개. 러닝 외 기록은 보관만 합니다."
 
 fun effectiveHealthMeasurements(values: List<HealthMeasurementEntity>): List<HealthMeasurementEntity> =
-    values.filterNot { it.type == HealthMetricType.BODY_WATER_L }
+    values.filterNot { it.type.isCode || (it.type == HealthMetricType.BODY_WATER_L && it.externalRecordId?.startsWith("inbody-csv-") != true) }
         .groupBy { it.recordDate to it.type }.values.mapNotNull { sameDay ->
         val type = sameDay.firstOrNull()?.type ?: return@mapNotNull null
         sameDay.filter { it.sourcePackage == com.hanshin.healthtask.domain.INBODY_PACKAGE }.maxByOrNull { it.measuredAt }

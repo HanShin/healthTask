@@ -17,6 +17,7 @@ import com.hanshin.healthtask.domain.WorkoutStatus
 @Entity(tableName = "profiles")
 data class ProfileEntity(
     @PrimaryKey val id: String = "local-profile",
+    // Legacy backup field only. The app no longer configures or evaluates weekly goals.
     val workoutsPerWeek: Int = 3,
     val onboardingDone: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
@@ -118,11 +119,16 @@ data class WorkoutSessionEntity(
     val routePolyline: String? = null,
     val lapData: String? = null,
     val activeDurationMillis: Long? = null,
+    val sensorSummaryJson: String? = null,
     val syncStatus: SyncStatus = SyncStatus.PENDING,
     val syncError: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
+
+/** Small rows keep long sensor timelines below Android's per-row CursorWindow limit. */
+@Entity(tableName = "run_telemetry_chunks", primaryKeys = ["sessionId", "chunkIndex"])
+data class RunTelemetryChunkEntity(val sessionId: String, val chunkIndex: Int, val jsonPart: String)
 
 @Entity(tableName = "workout_items", indices = [Index("sessionId"), Index("exerciseId")])
 data class WorkoutItemEntity(
@@ -167,6 +173,19 @@ data class HealthMeasurementEntity(
     val sourcePackage: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
+)
+
+@Entity(tableName = "inbody_records")
+data class InBodyRecordEntity(
+    @PrimaryKey val id: String,
+    val measuredLocal: String,
+    val measuredAt: Long,
+    val timeZoneId: String,
+    val device: String,
+    val sourceFileName: String,
+    val rawFieldsJson: String,
+    val createdAt: Long,
+    val updatedAt: Long,
 )
 
 @Entity(

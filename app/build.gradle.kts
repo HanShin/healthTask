@@ -25,8 +25,8 @@ android {
         applicationId = "com.hanshin.healthtask"
         minSdk = 34
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.3.3"
+        versionCode = 10
+        versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
     }
@@ -69,6 +69,7 @@ android {
     }
 
     testOptions.unitTests.isIncludeAndroidResources = true
+    sourceSets.getByName("androidTest").assets.srcDir("$projectDir/schemas")
 }
 
 tasks.register("generatePersonalReleaseKey") {
@@ -148,12 +149,13 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
     implementation("androidx.wear:wear-remote-interactions:1.2.0")
-    implementation("androidx.media3:media3-exoplayer:1.11.0")
-    implementation("androidx.media3:media3-ui:1.11.0")
+    implementation("org.maplibre.gl:android-sdk:13.6.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("androidx.room:room-testing:2.8.4")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")

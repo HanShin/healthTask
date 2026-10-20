@@ -7,15 +7,11 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import com.hanshin.healthtask.shared.toRoutinePayload
 
 class WearWorkoutStartPolicyTest {
     private val now = 10_000L
-    private val routine = WearRoutinePayload(
-        routineId = "routine",
-        title = "루틴",
-        exercises = emptyList(),
-        updatedAt = now,
-    )
+    private val routine = com.hanshin.healthtask.shared.WearQuickRunPreset.FREE_RUN.toRoutinePayload(updatedAt = now)
 
     @Test fun `local start is blocked while a live phone request has priority`() {
         val local = PendingWorkoutStart(routine)
@@ -52,6 +48,13 @@ class WearWorkoutStartPolicyTest {
         )
 
         assertFalse(isWorkoutStartCurrent(PendingWorkoutStart(routine), active, null, now))
+    }
+
+    @Test fun `old strength and mixed payloads cannot start`() {
+        val strength = routine.copy(sensorMode = com.hanshin.healthtask.shared.WearSensorMode.STRENGTH)
+        assertFalse(isWorkoutStartCurrent(PendingWorkoutStart(strength), null, null, now))
+        val invalid = routine.copy(exercises = emptyList())
+        assertFalse(isWorkoutStartCurrent(PendingWorkoutStart(invalid), null, null, now))
     }
 
     @Test fun `expiry delay clamps requests that already reached ttl`() {

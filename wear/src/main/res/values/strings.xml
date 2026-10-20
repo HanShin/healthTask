@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">오늘운동</string>
-    <string name="exercise_notification_channel">운동 측정</string>
-    <string name="exercise_notification_title">오늘운동 기록 중</string>
+    <string name="app_name">오늘러닝</string>
+    <string name="exercise_notification_channel">러닝 측정</string>
+    <string name="exercise_notification_title">오늘러닝 기록 중</string>
 </resources>

@@ -18,6 +18,9 @@ import com.hanshin.healthtask.data.db.SetRecordEntity
 import com.hanshin.healthtask.data.db.TrainingPlanEntity
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionEntity
+import com.hanshin.healthtask.data.db.WorkoutSessionWithItems
+import com.hanshin.healthtask.data.db.RunTelemetryChunkEntity
+import com.hanshin.healthtask.data.db.InBodyRecordEntity
 import com.hanshin.healthtask.domain.ExerciseCategory
 import com.hanshin.healthtask.domain.HealthMetricType
 import com.hanshin.healthtask.domain.RecordMode
@@ -28,9 +31,11 @@ import com.hanshin.healthtask.domain.isExternal
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 data class BackupPayload(
-    val schemaVersion: Int = 3,
+    val schemaVersion: Int = 5,
     val exportedAt: String = Instant.now().toString(),
     val profile: ProfileEntity?,
     val exercises: List<ExerciseEntity>,
@@ -43,6 +48,8 @@ data class BackupPayload(
     val samsungWorkoutLinks: List<SamsungWorkoutLinkEntity>,
     val trainingPlans: List<TrainingPlanEntity>? = null,
     val planSlots: List<PlanSlotEntity>? = null,
+    val runTelemetryChunks: List<RunTelemetryChunkEntity>? = null,
+    val inBodyRecords: List<InBodyRecordEntity>? = null,
 )
 
 data class ImportReport(
@@ -53,48 +60,101 @@ data class ImportReport(
     val trainingPlans: Int = 0,
 )
 
-class BackupCodec(private val database: HealthTaskDatabase) {
-    private val gson: Gson = GsonBuilder().setPrettyPrinting().create()
+private data class BackupExportSnapshot(
+    val payload: BackupPayload,
+    val allSessions: List<WorkoutSessionWithItems>,
+    val allMeasurements: List<HealthMeasurementEntity>,
+    val allLinks: List<SamsungWorkoutLinkEntity>,
+)
 
-    suspend fun export(): String {
-        val dao = database.dao()
-        val routines = dao.getRoutines()
-        val sessions = dao.getSessions().filterNot { it.session.source.isExternal() }
-        val localIds = sessions.mapTo(mutableSetOf()) { it.session.id }
-        val trainingPlans = dao.getTrainingPlans()
-        val payload = BackupPayload(
-            profile = dao.getProfile(),
-            exercises = dao.getExercises(),
-            routines = routines.map { it.routine },
-            routineItems = routines.flatMap { it.items },
-            sessions = sessions.map { it.session },
-            workoutItems = sessions.flatMap { it.items }.map { it.item },
-            setRecords = sessions.flatMap { it.items }.flatMap { it.sets },
-            healthMeasurements = dao.getHealthMeasurements().filterNot { it.source.isExternal() },
-            samsungWorkoutLinks = dao.getWorkoutLinks().filter { it.localSessionId in localIds },
-            trainingPlans = trainingPlans.map { it.plan },
-            planSlots = trainingPlans.flatMap { it.slots },
-        )
-        return gson.toJson(payload)
+class BackupCodec(private val database: HealthTaskDatabase) {
+    private val gson: Gson = GsonBuilder().setPrettyPrinting().serializeNulls().create()
+
+    suspend fun export(): String = withContext(Dispatchers.Default) {
+        // Read one consistent database snapshot even if a sync finishes during export.
+        val snapshot = database.withTransaction {
+            val dao = database.dao()
+            val routines = dao.getRoutines()
+            val allSessions = dao.getSessions()
+            val allMeasurements = dao.getHealthMeasurements()
+            val allLinks = dao.getWorkoutLinks()
+            val sessions = allSessions.filterNot { it.session.source.isExternal() }
+            val localIds = sessions.mapTo(mutableSetOf()) { it.session.id }
+            val trainingPlans = dao.getTrainingPlans()
+            val payload = BackupPayload(
+                profile = dao.getProfile(),
+                exercises = dao.getExercises(),
+                routines = routines.map { it.routine },
+                routineItems = routines.flatMap { it.items },
+                sessions = sessions.map { it.session },
+                workoutItems = sessions.flatMap { it.items }.map { it.item },
+                setRecords = sessions.flatMap { it.items }.flatMap { it.sets },
+                healthMeasurements = allMeasurements.filterNot { it.source.isExternal() },
+                samsungWorkoutLinks = allLinks.filter { it.localSessionId in localIds },
+                trainingPlans = trainingPlans.map { it.plan },
+                planSlots = trainingPlans.flatMap { it.slots },
+                runTelemetryChunks = dao.getTelemetryChunks().filter { it.sessionId in localIds },
+                inBodyRecords = dao.getInBodyRecords(),
+            )
+            BackupExportSnapshot(payload, allSessions, allMeasurements, allLinks)
+        }
+        val analysis = AnalysisExportBuilder.build(snapshot.allSessions, snapshot.allMeasurements,
+            snapshot.allLinks, snapshot.payload.exportedAt, telemetryChunks = snapshot.payload.runTelemetryChunks.orEmpty(),
+            inBodyRecords = snapshot.payload.inBodyRecords.orEmpty())
+        val root = gson.toJsonTree(snapshot.payload).asJsonObject
+        // Analysis is ignored by restore; external caches never become restored local records.
+        root.add("analysis", gson.toJsonTree(analysis))
+        gson.toJson(root)
     }
 
     suspend fun import(raw: String): ImportReport {
         val root = JsonParser.parseString(raw).asJsonObject
-        return if (root.int("schemaVersion") in 2..3) importModern(root) else importLegacy(root)
+        val version = root.int("schemaVersion") ?: 1
+        require(version in 1..5) { "지원하지 않는 백업 버전입니다. 앱을 업데이트해 주세요." }
+        return if (version in 2..5) importModern(root) else importLegacy(root)
     }
 
     private suspend fun importModern(root: JsonObject): ImportReport {
         val payload = gson.fromJson(root, BackupPayload::class.java)
+        val inBodyRecords = payload.inBodyRecords.orEmpty()
+        require(inBodyRecords.map { it.id }.distinct().size == inBodyRecords.size) { "인바디 백업에 중복 기록이 있습니다." }
+        inBodyRecords.forEach(::validateInBodyRecord)
+        val csvMetrics = inBodyRecords.flatMap { it.toHealthMeasurements() }
+        val csvById = csvMetrics.associateBy { it.id }
+        val csvIds = csvById.keys
+        if (payload.schemaVersion >= 5) {
+            val storedCsv = payload.healthMeasurements.filter { it.externalRecordId?.startsWith("inbody-csv-") == true }
+            require(storedCsv.size == csvMetrics.size && storedCsv.all { saved ->
+                csvById[saved.id] == saved
+            }) { "인바디 원본과 측정값이 일치하지 않습니다. 백업을 확인해 주세요." }
+        }
+        val chunksBySession = payload.runTelemetryChunks.orEmpty().groupBy { it.sessionId }
+        chunksBySession.forEach { (id, chunks) ->
+            require(payload.sessions.any { it.id == id && !it.source.isExternal() }) { "센서 기록에 대응하는 로컬 러닝이 없습니다." }
+            chunks.decodeTelemetry()
+        }
         database.withTransaction {
             val dao = database.dao()
             payload.profile?.let { dao.upsertProfile(it) }
             if (payload.exercises.isNotEmpty()) dao.upsertExercises(payload.exercises)
             payload.routines.forEach { dao.upsertRoutine(it) }
             if (payload.routineItems.isNotEmpty()) dao.upsertRoutineItems(payload.routineItems)
-            payload.sessions.forEach { dao.upsertSession(it) }
+            payload.sessions.forEach { session ->
+                // An old backup has no sensor payload: do not erase newer telemetry on an ID collision.
+                val existingSummary = if (payload.schemaVersion < 4) dao.getSession(session.id)?.session?.sensorSummaryJson else null
+                dao.upsertSession(session.copy(sensorSummaryJson = session.sensorSummaryJson ?: existingSummary))
+                if (payload.schemaVersion >= 4) dao.deleteTelemetryChunks(session.id)
+            }
+            if (payload.runTelemetryChunks.orEmpty().isNotEmpty()) dao.upsertTelemetryChunks(payload.runTelemetryChunks.orEmpty())
             if (payload.workoutItems.isNotEmpty()) dao.upsertWorkoutItems(payload.workoutItems)
             if (payload.setRecords.isNotEmpty()) dao.upsertSetRecords(payload.setRecords)
-            if (payload.healthMeasurements.isNotEmpty()) dao.upsertHealthMeasurements(payload.healthMeasurements)
+            inBodyRecords.forEach { record ->
+                dao.deleteInBodyRecordMetrics(record.id)
+                dao.upsertInBodyRecord(record)
+            }
+            val ordinary = payload.healthMeasurements.filterNot { it.id in csvIds }
+            if (ordinary.isNotEmpty()) dao.upsertHealthMeasurements(ordinary)
+            if (csvMetrics.isNotEmpty()) dao.upsertHealthMeasurements(csvMetrics)
             payload.samsungWorkoutLinks.forEach { dao.upsertWorkoutLink(it) }
             payload.trainingPlans.orEmpty().forEach { dao.upsertTrainingPlan(it) }
             if (payload.planSlots.orEmpty().isNotEmpty()) dao.upsertPlanSlots(payload.planSlots.orEmpty())

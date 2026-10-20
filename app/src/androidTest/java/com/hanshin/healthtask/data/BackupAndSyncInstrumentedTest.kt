@@ -10,6 +10,7 @@ import com.hanshin.healthtask.data.db.SetRecordEntity
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutSessionEntity
 import com.hanshin.healthtask.domain.ExerciseCategory
+import com.hanshin.healthtask.domain.HealthMetricType
 import com.hanshin.healthtask.domain.RecordMode
 import com.hanshin.healthtask.domain.SyncStatus
 import com.hanshin.healthtask.domain.WorkoutSource
@@ -27,7 +28,6 @@ import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutineExercise
 import com.hanshin.healthtask.shared.WearRoutineSet
-import com.hanshin.healthtask.shared.TABATA_EXERCISE_ID
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -50,36 +50,27 @@ class BackupAndSyncInstrumentedTest {
 
     @After fun close() = database.close()
 
-    @Test fun tabataSeedIsAddedForExistingUsersAndAlwaysSavedAsFinisher() = runBlocking {
+    @Test fun initializationSeedsOnlyRunningAndPreservesLegacyData() = runBlocking {
         val repository = HealthTaskRepository(database)
-        database.dao().upsertExercises(listOf(ExerciseEntity(
-            id = "custom-existing",
-            name = "기존 운동",
-            category = ExerciseCategory.WEIGHT,
-            recordMode = RecordMode.SETS,
-            isCustom = true,
-        )))
-
+        val old = ExerciseEntity(id = "custom-existing", name = "기존 운동", category = ExerciseCategory.WEIGHT,
+            recordMode = RecordMode.SETS, isCustom = true)
+        database.dao().upsertExercises(listOf(old))
         repository.initialize()
-        assertNotNull(database.dao().getExercises().firstOrNull { it.id == TABATA_EXERCISE_ID })
-        assertNotNull(database.dao().getExercises().firstOrNull { it.id == "custom-existing" })
+        assertEquals(true, database.dao().getProfile()!!.onboardingDone)
+        assertEquals(old, database.dao().getExercise(old.id))
+        assertEquals(setOf("custom-existing", "easy-run", "tempo-run", "long-run"),
+            database.dao().getExercises().map { it.id }.toSet())
+        assertEquals(emptyList<Any>(), database.dao().getRoutines())
+        assertEquals(emptyList<Any>(), database.dao().getTrainingPlans())
+    }
 
-        repository.saveRoutine(
-            routineId = null,
-            name = "타바타 마무리",
-            exerciseIds = listOf(TABATA_EXERCISE_ID, "squat"),
-        )
-        val routine = database.dao().getRoutines().single()
-        assertEquals(
-            listOf("squat", TABATA_EXERCISE_ID),
-            routine.items.sortedBy { it.orderIndex }.map { it.exerciseId },
-        )
-
-        val sessionId = repository.startSession(routine.routine.id)
-        val tabata = database.dao().getSession(sessionId)!!.items.single {
-            it.item.exerciseId == TABATA_EXERCISE_ID
-        }
-        assertEquals(null, tabata.item.durationMin)
+    @Test fun initializationPreservesExistingProfileEvenIfOldOnboardingWasIncomplete() = runBlocking {
+        val old = com.hanshin.healthtask.data.db.ProfileEntity(workoutsPerWeek = 6, onboardingDone = false)
+        database.dao().upsertProfile(old)
+        val repository = HealthTaskRepository(database)
+        repository.initialize()
+        repository.initialize()
+        assertEquals(old, database.dao().getProfile())
     }
 
     @Test fun legacyV1ImportIsLosslessAndIdempotent() = runBlocking {
@@ -110,7 +101,7 @@ class BackupAndSyncInstrumentedTest {
         val now = System.currentTimeMillis()
         dao.upsertSession(WorkoutSessionEntity(
             id = "local-session",
-            title = "웨이트",
+            title = "러닝",
             sessionDate = "2026-08-21",
             status = WorkoutStatus.COMPLETED,
             source = WorkoutSource.LOCAL,
@@ -119,8 +110,8 @@ class BackupAndSyncInstrumentedTest {
             syncStatus = SyncStatus.PENDING,
         ))
         dao.upsertWorkoutItems(listOf(WorkoutItemEntity(
-            id = "item", sessionId = "local-session", exerciseId = "squat", exerciseName = "스쿼트",
-            orderIndex = 1, category = ExerciseCategory.WEIGHT, recordMode = RecordMode.SETS,
+            id = "item", sessionId = "local-session", exerciseId = "easy-run", exerciseName = "러닝",
+            orderIndex = 1, category = ExerciseCategory.CARDIO, recordMode = RecordMode.CARDIO,
         )))
         val fake = FakeGateway(failuresBeforeSuccess = 1)
         val manager = HealthSyncManager(database, fake, AppPreferences(context))
@@ -265,24 +256,6 @@ class BackupAndSyncInstrumentedTest {
 
         assertEquals(true, repository.importWearWorkout(workout))
         assertEquals(false, repository.importWearWorkout(workout))
-        repository.finishSession("shared-session")
-        repository.updateWorkoutItem(WorkoutItemEntity(
-            id = "old-item",
-            sessionId = "shared-session",
-            exerciseId = "old-exercise",
-            exerciseName = "늦게 도착한 폰 수정",
-            orderIndex = 1,
-            category = ExerciseCategory.WEIGHT,
-            recordMode = RecordMode.SETS,
-        ))
-        repository.updateSet(SetRecordEntity(
-            id = "late-old-set",
-            workoutItemId = "old-item",
-            orderIndex = 1,
-            actualReps = 99,
-            completed = true,
-        ))
-
         val saved = dao.getSession("shared-session")!!
         assertEquals(WorkoutStatus.COMPLETED, saved.session.status)
         assertEquals("완료 루틴", saved.session.title)
@@ -453,45 +426,77 @@ class BackupAndSyncInstrumentedTest {
         assertEquals(126.0, saved.session.averageHeartRateBpm!!, 0.001)
     }
 
-    @Test fun onboardingCreatesPlanAndPlannedSessionsKeepTheirSlot() = runBlocking {
+    @Test fun runningAndAllInBodyFieldsSurviveBackupRoundTrip() = runBlocking {
         val repository = HealthTaskRepository(database)
         repository.initialize()
-        repository.finishOnboarding(workoutsPerWeek = 4, installTemplates = true)
-        val plan = database.dao().getTrainingPlans().single { it.plan.isActive }
-
-        assertEquals(4, plan.slots.size)
-        assertEquals(
-            listOf(
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.EASY_RUN,
-                PlannedWorkoutType.STRENGTH,
-                PlannedWorkoutType.QUALITY_RUN,
-            ),
-            plan.slots.sortedBy { it.orderIndex }.map { it.workoutType },
+        val start = System.currentTimeMillis() - 1_800_000
+        repository.savePhoneRun(sessionId = "run-roundtrip", startedAt = start, endedAt = start + 1_800_000,
+            elapsedMillis = 1_800_000, distanceMeters = 5_000.0,
+            routePolyline = "37.5,127.0,0;37.501,127.001,1000", lapData = null)
+        val values = mapOf(
+            HealthMetricType.WEIGHT_KG to 70.0, HealthMetricType.BODY_FAT_PERCENT to 18.0,
+            HealthMetricType.BODY_FAT_MASS_KG to 12.6, HealthMetricType.SKELETAL_MUSCLE_KG to 33.0,
+            HealthMetricType.VISCERAL_FAT_LEVEL to 6.0, HealthMetricType.INBODY_SCORE to 82.0,
         )
-
-        val strength = plan.slots.first { it.workoutType == PlannedWorkoutType.STRENGTH }
-        val strengthSessionId = repository.startSession(strength.routineId!!, strength.id)
-        assertEquals(strength.id, database.dao().getSession(strengthSessionId)!!.session.planSlotId)
-
-        val runSlot = plan.slots.first { it.workoutType == PlannedWorkoutType.EASY_RUN }
-        val startedAt = System.currentTimeMillis() - 30 * 60_000
-        val run = repository.savePhoneRun(
-            startedAt = startedAt,
-            endedAt = System.currentTimeMillis(),
-            elapsedMillis = 30 * 60_000,
-            distanceMeters = 5_000.0,
-            routePolyline = null,
-            lapData = null,
-            planSlotId = runSlot.id,
-        )
-        assertEquals(runSlot.id, run.planSlotId)
-        assertEquals("이지런", run.title)
-
+        repository.saveInBodyScreenshotMetrics(java.time.LocalDate.now(), values)
         val backup = BackupCodec(database).export()
-        assertEquals(true, backup.contains("\"schemaVersion\": 3"))
-        assertEquals(true, backup.contains("\"trainingPlans\""))
-        assertEquals(true, backup.contains("\"planSlots\""))
+        val restored = Room.inMemoryDatabaseBuilder(context, HealthTaskDatabase::class.java).build()
+        try {
+            BackupCodec(restored).import(backup)
+            val run = restored.dao().getSession("run-roundtrip")!!
+            assertEquals(5.0, run.session.distanceKm!!, 0.001)
+            assertEquals("37.5,127.0,0;37.501,127.001,1000", run.session.routePolyline)
+            assertEquals(values, restored.dao().getHealthMeasurements().associate { it.type to it.value })
+        } finally { restored.close() }
+    }
+
+    @Test fun bodyMeasurementsCanBeDatedEditedAndDeletedWithoutTouchingRuns() = runBlocking {
+        val repository = HealthTaskRepository(database)
+        val start = System.currentTimeMillis() - 1_800_000L
+        repository.savePhoneRun(sessionId = "run-body-edit", startedAt = start, endedAt = start + 1_800_000L,
+            elapsedMillis = 1_800_000L, distanceMeters = 5_000.0, routePolyline = "kept-route", lapData = null)
+        val originalRun = database.dao().getSession("run-body-edit")
+        val date = java.time.LocalDate.now().minusDays(2)
+        repository.saveBodyMeasurement(date, HealthMetricType.SKELETAL_MUSCLE_KG, 32.0)
+        val original = database.dao().getHealthMeasurements().single()
+        repository.saveBodyMeasurement(date.plusDays(1), original.type, 32.5, original.id)
+        val updated = database.dao().getHealthMeasurements().single()
+        assertEquals(original.id, updated.id)
+        assertEquals(date.plusDays(1).toString(), updated.recordDate)
+        assertEquals(32.5, updated.value, 0.001)
+        repository.saveBodyMeasurement(date, original.type, 31.0)
+        assertEquals(2, database.dao().getHealthMeasurements().size)
+        assertEquals(updated, database.dao().getHealthMeasurement(updated.id))
+        repository.deleteBodyMeasurement(updated.id)
+        assertEquals(31.0, database.dao().getHealthMeasurements().single().value, 0.001)
+        assertEquals(originalRun, database.dao().getSession("run-body-edit"))
+    }
+
+    @Test fun healthSyncSkipsStrengthAndWalkingButKeepsBodyMeasurements() = runBlocking {
+        val start = Instant.now().minusSeconds(1_800)
+        val strength = ExternalWorkout("strength", "근력", ExerciseCategory.WEIGHT, start, start.plusSeconds(1_200),
+            source = WorkoutSource.SAMSUNG_HEALTH, sourcePackage = "com.sec.android.app.shealth")
+        val walking = strength.copy(recordId = "walking", title = "걷기", category = ExerciseCategory.CARDIO)
+        val running = strength.copy(recordId = "running", title = "아침 운동", category = ExerciseCategory.CARDIO, isRunning = true)
+        val body = com.hanshin.healthtask.domain.ExternalHealthMeasurement("body", HealthMetricType.WEIGHT_KG, 70.0, start)
+        val fake = FakeGateway(snapshot = HealthConnectSnapshot(listOf(strength, walking, running), listOf(body)))
+        val result = HealthSyncManager(database, fake, AppPreferences(context)).sync(force = true)
+        assertEquals(1, result.downloadedWorkouts)
+        assertEquals("아침 운동", database.dao().getSessions().single().session.title)
+        assertEquals(70.0, database.dao().getHealthMeasurements().single().value, 0.001)
+    }
+
+    @Test fun pendingLegacyStrengthIsPreservedButNotUploadedAsRunning() = runBlocking {
+        val dao = database.dao()
+        dao.upsertSession(WorkoutSessionEntity(id = "legacy-strength", title = "근력", sessionDate = "2026-08-21",
+            status = WorkoutStatus.COMPLETED, source = WorkoutSource.LOCAL, startedAt = 0, endedAt = 1_800_000))
+        dao.upsertWorkoutItems(listOf(WorkoutItemEntity(id = "old-item", sessionId = "legacy-strength",
+            exerciseId = "squat", exerciseName = "스쿼트", orderIndex = 1,
+            category = ExerciseCategory.WEIGHT, recordMode = RecordMode.SETS)))
+        val fake = FakeGateway()
+        HealthSyncManager(database, fake, AppPreferences(context)).sync(force = true)
+        assertEquals(0, fake.writeCalls)
+        assertNotNull(dao.getSession("legacy-strength"))
     }
 
     @Test fun watchRunImportKeepsDistanceActiveTimeAndAveragePace() = runBlocking {

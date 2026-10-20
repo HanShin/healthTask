@@ -8,6 +8,7 @@ import com.google.gson.Gson
 import com.hanshin.healthtask.shared.WearPaths
 import com.hanshin.healthtask.shared.WearRoutinePayload
 import com.hanshin.healthtask.shared.WearStartWorkoutRequest
+import com.hanshin.healthtask.shared.usesGpsRunning
 import com.hanshin.healthtask.wear.WatchApplication
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -68,5 +69,5 @@ internal fun decodeStartWorkoutRequest(
     val request = json
         ?.let { runCatching { gson.fromJson(it, WearStartWorkoutRequest::class.java) }.getOrNull() }
         ?: return null
-    return request.takeIf { it.requestId == requestId && it.isValid(now) }
+    return request.takeIf { it.requestId == requestId && it.isValid(now) && it.routine.usesGpsRunning }
 }

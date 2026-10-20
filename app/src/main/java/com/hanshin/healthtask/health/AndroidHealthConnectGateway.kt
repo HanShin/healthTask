@@ -64,7 +64,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
             dataOriginFilters = origins,
         ))
         val range = TimeRangeFilter.between(Instant.EPOCH, Instant.now().plusSeconds(1))
-        val workouts = readAll(ExerciseSessionRecord::class, range, origins).map { toWorkout(it) }
+        val workouts = readAll(ExerciseSessionRecord::class, range, origins).filter { isRunningType(it.exerciseType) }.map { toWorkout(it) }
         val samsungOrigin = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE))
         val weights = readAll(WeightRecord::class, range, samsungOrigin).map(::toMeasurement)
         val bodyFat = readAll(BodyFatRecord::class, range, samsungOrigin).map(::toMeasurement)
@@ -79,11 +79,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
             startZoneOffset = zone,
             endTime = summary.endedAt,
             endZoneOffset = ZoneId.systemDefault().rules.getOffset(summary.endedAt),
-            exerciseType = when (summary.category) {
-                ExerciseCategory.CARDIO -> ExerciseSessionRecord.EXERCISE_TYPE_RUNNING
-                ExerciseCategory.BODYWEIGHT -> ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS
-                ExerciseCategory.WEIGHT -> ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING
-            },
+            exerciseType = ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
             title = summary.title,
             metadata = Metadata.manualEntry(
                 clientRecordId = summary.sessionId,
@@ -145,7 +141,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
                 when (change) {
                     is DeletionChange -> deleted += change.recordId
                     is UpsertionChange -> when (val record = change.record) {
-                        is ExerciseSessionRecord -> workouts += toWorkout(record)
+                        is ExerciseSessionRecord -> if (isRunningType(record.exerciseType)) workouts += toWorkout(record)
                         is WeightRecord -> measurements += toMeasurement(record)
                         is BodyFatRecord -> measurements += toMeasurement(record)
                     }
@@ -163,32 +159,33 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
             ExerciseSessionRecord::class,
             range,
             setOf(DataOrigin(NIKE_RUN_CLUB_PACKAGE)),
-        ).map { toWorkout(it) }
+        ).filter { isRunningType(it.exerciseType) }.map { toWorkout(it) }
         return copy(workouts = (workouts + recent).distinctBy { it.recordId })
     }
 
     private suspend fun toWorkout(record: ExerciseSessionRecord): ExternalWorkout {
         val packageName = record.metadata.dataOrigin.packageName
-        val details = if (packageName == NIKE_RUN_CLUB_PACKAGE) readNikeDetails(record) else WorkoutDetails()
+        val details = readRunningDetails(record)
         return ExternalWorkout(
             recordId = record.metadata.id,
             title = record.title?.takeIf { it.isNotBlank() }
                 ?: if (packageName == NIKE_RUN_CLUB_PACKAGE) "Nike Run Club 달리기" else exerciseTitle(record.exerciseType),
-            category = exerciseCategory(record.exerciseType),
+            category = ExerciseCategory.CARDIO,
             start = record.startTime,
             end = record.endTime,
             distanceKm = details.distanceKm,
             caloriesKcal = details.caloriesKcal,
             source = if (packageName == NIKE_RUN_CLUB_PACKAGE) WorkoutSource.NIKE_RUN_CLUB else WorkoutSource.SAMSUNG_HEALTH,
             sourcePackage = packageName,
+            isRunning = true,
         )
     }
 
-    private suspend fun readNikeDetails(record: ExerciseSessionRecord): WorkoutDetails {
+    private suspend fun readRunningDetails(record: ExerciseSessionRecord): WorkoutDetails {
         val result = client.aggregate(AggregateRequest(
             metrics = setOf(DistanceRecord.DISTANCE_TOTAL, TotalCaloriesBurnedRecord.ENERGY_TOTAL),
             timeRangeFilter = TimeRangeFilter.between(record.startTime, record.endTime),
-            dataOriginFilter = setOf(DataOrigin(NIKE_RUN_CLUB_PACKAGE)),
+            dataOriginFilter = setOf(record.metadata.dataOrigin),
         ))
         return WorkoutDetails(
             distanceKm = result[DistanceRecord.DISTANCE_TOTAL]?.inKilometers?.takeIf { it > 0.0 },
@@ -212,19 +209,12 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         sourcePackage = record.metadata.dataOrigin.packageName,
     )
 
-    private fun exerciseCategory(type: Int): ExerciseCategory = when (type) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING,
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> ExerciseCategory.CARDIO
-        ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> ExerciseCategory.BODYWEIGHT
-        else -> ExerciseCategory.WEIGHT
-    }
+    private fun isRunningType(type: Int): Boolean =
+        type == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING ||
+            type == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL
 
-    private fun exerciseTitle(type: Int): String = when (type) {
-        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "달리기"
-        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "걷기"
-        ExerciseSessionRecord.EXERCISE_TYPE_CALISTHENICS -> "맨몸운동"
-        else -> "근력 운동"
-    }
+    private fun exerciseTitle(type: Int): String =
+        if (type == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL) "트레드밀 러닝" else "러닝"
 
     private data class WorkoutDetails(
         val distanceKm: Double? = null,

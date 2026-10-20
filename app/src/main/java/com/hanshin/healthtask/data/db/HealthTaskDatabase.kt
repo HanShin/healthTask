@@ -17,13 +17,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         TrainingPlanEntity::class,
         PlanSlotEntity::class,
         WorkoutSessionEntity::class,
+        RunTelemetryChunkEntity::class,
         WorkoutItemEntity::class,
         SetRecordEntity::class,
         HealthMeasurementEntity::class,
+        InBodyRecordEntity::class,
         SamsungWorkoutLinkEntity::class,
         SyncStateEntity::class,
     ],
-    version = 5,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -33,9 +35,22 @@ abstract class HealthTaskDatabase : RoomDatabase() {
     companion object {
         fun create(context: Context): HealthTaskDatabase =
             Room.databaseBuilder(context, HealthTaskDatabase::class.java, "health-task.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                 .fallbackToDestructiveMigrationOnDowngrade(true)
                 .build()
+
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS `inbody_records` (`id` TEXT NOT NULL, `measuredLocal` TEXT NOT NULL, `measuredAt` INTEGER NOT NULL, `timeZoneId` TEXT NOT NULL, `device` TEXT NOT NULL, `sourceFileName` TEXT NOT NULL, `rawFieldsJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))")
+            }
+        }
+
+        internal val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE workout_sessions ADD COLUMN sensorSummaryJson TEXT")
+                db.execSQL("CREATE TABLE IF NOT EXISTS `run_telemetry_chunks` (`sessionId` TEXT NOT NULL, `chunkIndex` INTEGER NOT NULL, `jsonPart` TEXT NOT NULL, PRIMARY KEY(`sessionId`, `chunkIndex`))")
+            }
+        }
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {

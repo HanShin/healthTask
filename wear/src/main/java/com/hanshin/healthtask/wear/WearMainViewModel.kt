@@ -1,34 +1,22 @@
 package com.hanshin.healthtask.wear
 
 import android.app.Application
-import android.os.Build
-import android.os.VibrationEffect
-import android.os.Vibrator
-import android.os.VibratorManager
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.hanshin.healthtask.shared.DEFAULT_REST_TIMER_SECONDS
-import com.hanshin.healthtask.shared.TABATA_TOTAL_SECONDS
-import com.hanshin.healthtask.shared.TabataPhase
-import com.hanshin.healthtask.shared.TabataTimer
-import com.hanshin.healthtask.shared.TabataTimerState
 import com.hanshin.healthtask.shared.WearActiveSession
 import com.hanshin.healthtask.shared.WearCompletedWorkout
 import com.hanshin.healthtask.shared.WearRecordMode
 import com.hanshin.healthtask.shared.WearRoutinePayload
-import com.hanshin.healthtask.shared.WearRoutineSet
 import com.hanshin.healthtask.shared.WearRouteCodec
 import com.hanshin.healthtask.shared.WearStartWorkoutRequest
 import com.hanshin.healthtask.shared.elapsedMillis
-import com.hanshin.healthtask.shared.isTabata
-import com.hanshin.healthtask.shared.remainingRestSeconds
 import com.hanshin.healthtask.shared.usesGpsRunning
 import com.hanshin.healthtask.wear.health.WearExerciseService
 import com.hanshin.healthtask.wear.health.WearMetrics
 import com.hanshin.healthtask.wear.health.WearMetricsRepository
+import com.hanshin.healthtask.wear.health.withTelemetryFallback
 import java.util.UUID
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,14 +26,16 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 data class WearUiState(
     val routine: WearRoutinePayload? = null,
     val pendingStartRequest: WearStartWorkoutRequest? = null,
     val active: WearActiveSession? = null,
     val metrics: WearMetrics = WearMetrics(),
-    val restRemainingSeconds: Int = 0,
-    val tabataTimer: TabataTimerState = TabataTimerState(),
     val message: String? = null,
 ) {
     val currentExercise get() = active?.exercises?.getOrNull(active.currentExerciseIndex)
@@ -57,42 +47,27 @@ internal data class PendingWorkoutStart(
     val requestId: String? = null,
 )
 
-private data class WearTransientUiState(
-    val restRemainingSeconds: Int,
-    val tabataTimer: TabataTimerState,
-    val message: String?,
-)
-
 class WearMainViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as WatchApplication
-    private val restRemainingSeconds = MutableStateFlow(0)
-    private val tabataTimer = MutableStateFlow(TabataTimerState())
     private val message = MutableStateFlow<String?>(null)
     private val _pendingPermissionStart = MutableStateFlow<PendingWorkoutStart?>(null)
     internal val pendingPermissionStart = _pendingPermissionStart.asStateFlow()
-    private var tabataTimerJob: Job? = null
-    private var tabataPausedByWorkout = false
     private var workoutStartInProgress = false
-
-    private val transientUiState = combine(restRemainingSeconds, tabataTimer, message) { rest, tabata, currentMessage ->
-        WearTransientUiState(rest, tabata, currentMessage)
-    }
+    private var workoutFinishInProgress = false
 
     val state: StateFlow<WearUiState> = combine(
         app.store.routine,
         app.store.pendingStartRequest,
         app.store.activeSession,
         WearMetricsRepository.metrics,
-        transientUiState,
-    ) { routine, pendingStartRequest, active, metrics, transient ->
+        message,
+    ) { routine, pendingStartRequest, active, metrics, currentMessage ->
         WearUiState(
-            routine = routine,
-            pendingStartRequest = pendingStartRequest,
+            routine = routine?.takeIf { it.usesGpsRunning },
+            pendingStartRequest = pendingStartRequest?.takeIf { it.routine.usesGpsRunning },
             active = active,
             metrics = metrics,
-            restRemainingSeconds = transient.restRemainingSeconds,
-            tabataTimer = transient.tabataTimer,
-            message = transient.message,
+            message = currentMessage,
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, WearUiState())
 
@@ -109,26 +84,6 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
                 viewModelScope.launch {
                     app.store.clearPendingStartRequest(request.requestId)
                     runCatching { app.dataGateway.consumeStartRequest(request.requestId) }
-                }
-            }
-        }
-        viewModelScope.launch {
-            app.store.activeSession.collectLatest { active ->
-                val restEndsAt = active?.restEndsAt
-                if (active == null || restEndsAt == null) {
-                    restRemainingSeconds.value = 0
-                    return@collectLatest
-                }
-                while (true) {
-                    val remaining = remainingRestSeconds(restEndsAt)
-                    restRemainingSeconds.value = remaining
-                    if (remaining <= 0) {
-                        signalRestComplete()
-                        message.value = "휴식 끝! 다음 세트를 시작하세요."
-                        app.store.saveActiveSession(active.copy(restEndsAt = null))
-                        return@collectLatest
-                    }
-                    delay(250L)
                 }
             }
         }
@@ -169,6 +124,10 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
         sessionId: String? = null,
         requestId: String? = null,
     ) {
+        if (!routine.usesGpsRunning) {
+            message.value = "이제 러닝만 기록할 수 있습니다."
+            return
+        }
         if (workoutStartInProgress) return
         workoutStartInProgress = true
         viewModelScope.launch {
@@ -205,7 +164,6 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
                         )
                     },
                 )
-                stopTabataTimer()
                 app.store.saveActiveSession(active)
                 if (trackSensors) {
                     val serviceStarted = runCatching {
@@ -236,48 +194,10 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
         message.value = "휴대폰에서 운동을 계속합니다."
     }
 
-    fun toggleSet(order: Int) = viewModelScope.launch {
-        val active = state.value.active ?: return@launch
-        val set = active.exercises.getOrNull(active.currentExerciseIndex)
-            ?.sets?.firstOrNull { it.order == order } ?: return@launch
-        val completing = !set.completed
-        val updated = active.updateCurrentExercise { exercise ->
-            exercise.copy(sets = exercise.sets.map { candidate ->
-                if (candidate.order == order) candidate.copy(completed = completing) else candidate
-            })
-        }.let { session ->
-            if (!completing) session
-            else {
-                val configuredSeconds = active.routine.restTimerSeconds
-                    .takeIf { it > 0 } ?: DEFAULT_REST_TIMER_SECONDS
-                session.copy(restEndsAt = System.currentTimeMillis() + configuredSeconds * 1_000L)
-            }
-        }
-        app.store.saveActiveSession(updated)
-    }
-
-    fun addRestTime(seconds: Int = 30) = updateActive { active ->
-        val currentEnd = active.restEndsAt ?: return@updateActive active
-        active.copy(restEndsAt = maxOf(currentEnd, System.currentTimeMillis()) + seconds * 1_000L)
-    }
-
-    fun skipRestTimer() = updateActive { it.copy(restEndsAt = null) }
-
-    fun adjustReps(delta: Int) = updateFocusedSet { set ->
-        set.copy(reps = ((set.reps ?: 0) + delta).coerceAtLeast(0))
-    }
-
-    fun adjustWeight(delta: Double) = updateFocusedSet { set ->
-        set.copy(weightKg = (((set.weightKg ?: 0.0) + delta).coerceAtLeast(0.0) * 2.0).toInt() / 2.0)
-    }
-
-    fun moveExercise(delta: Int) = updateActive { active ->
-        active.copy(currentExerciseIndex = (active.currentExerciseIndex + delta)
-            .coerceIn(0, (active.exercises.size - 1).coerceAtLeast(0)))
-    }
-
     fun togglePause() = viewModelScope.launch {
+        if (workoutFinishInProgress) return@launch
         val active = state.value.active ?: return@launch
+        if (active.finishedAt != null) return@launch
         val now = System.currentTimeMillis()
         val updated = if (active.paused) {
             active.copy(
@@ -287,13 +207,6 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
             )
         } else {
             active.copy(paused = true, pausedAt = now)
-        }
-        if (updated.paused && tabataTimer.value.isRunning) {
-            tabataPausedByWorkout = true
-            tabataTimer.value = TabataTimer.pause(tabataTimer.value)
-        } else if (!updated.paused && tabataPausedByWorkout) {
-            tabataPausedByWorkout = false
-            tabataTimer.value = TabataTimer.resume(tabataTimer.value)
         }
         app.store.saveActiveSession(updated)
         if (state.value.metrics.tracking) {
@@ -307,102 +220,58 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun startTabata(exercise: com.hanshin.healthtask.shared.WearRoutineExercise) {
-        if (!exercise.isTabata) return
-        if (state.value.active?.paused == true) {
-            message.value = "운동을 재개한 뒤 타바타를 시작하세요."
-            return
-        }
-        tabataTimerJob?.cancel()
-        val ready = TabataTimer.ready(
-            targetId = exercise.id,
-            workSeconds = exercise.intervalWorkSeconds ?: com.hanshin.healthtask.shared.TABATA_WORK_SECONDS,
-            restSeconds = exercise.intervalRestSeconds ?: com.hanshin.healthtask.shared.TABATA_REST_SECONDS,
-            rounds = exercise.intervalRounds ?: com.hanshin.healthtask.shared.TABATA_ROUNDS,
-        )
-        tabataTimer.value = TabataTimer.start(ready)
-        updateExercise(exercise.id) { it.copy(durationMin = null, distanceKm = null) }
-        signalTabataPhase(TabataPhase.WORK)
-        tabataTimerJob = viewModelScope.launch {
-            while (true) {
-                delay(1_000L)
-                val before = tabataTimer.value
-                val after = TabataTimer.tick(before)
-                tabataTimer.value = after
-                if (after.phase != before.phase) signalTabataPhase(after.phase)
-                if (after.isCompleted) {
-                    updateExerciseNow(after.targetId) {
-                        it.copy(durationMin = TABATA_TOTAL_SECONDS / 60.0, distanceKm = null)
-                    }
-                    message.value = "타바타 8라운드 완료!"
-                    tabataTimerJob = null
-                    return@launch
-                }
-            }
-        }
-    }
-
-    fun pauseTabata() {
-        tabataPausedByWorkout = false
-        tabataTimer.value = TabataTimer.pause(tabataTimer.value)
-    }
-
-    fun resumeTabata() {
-        if (state.value.active?.paused == true) {
-            message.value = "전체 운동을 먼저 재개하세요."
-            return
-        }
-        tabataTimer.value = TabataTimer.resume(tabataTimer.value)
-    }
-
-    fun resetTabata(exercise: com.hanshin.healthtask.shared.WearRoutineExercise) {
-        stopTabataTimer(exercise.id)
-        updateExercise(exercise.id) { it.copy(durationMin = null, distanceKm = null) }
-    }
-
     fun finishWorkout() = viewModelScope.launch {
-        val active = state.value.active ?: return@launch
-        val endedAt = System.currentTimeMillis()
-        val metrics = state.value.metrics
-        val trackedDurationMillis = metrics.activeDurationMillis.takeIf { metrics.tracking && it > 0L }
-            ?: active.elapsedMillis(endedAt)
-        val elapsedMinutes = trackedDurationMillis / 60_000.0
-        var cardioRecorded = false
-        val exercises = active.exercises.map { exercise ->
-            if (exercise.isTabata) {
-                exercise
-            } else if (exercise.recordMode == WearRecordMode.CARDIO && !cardioRecorded) {
-                cardioRecorded = true
-                exercise.copy(durationMin = elapsedMinutes, distanceKm = metrics.distanceKm)
-            } else exercise
-        }
-        val workout = WearCompletedWorkout(
-            sessionId = active.sessionId,
-            routineId = active.routine.routineId,
-            planSlotId = active.routine.planSlotId,
-            title = active.routine.title,
-            startedAt = active.startedAt,
-            endedAt = endedAt,
-            exercises = exercises,
-            averageHeartRateBpm = metrics.averageHeartRateBpm,
-            distanceKm = metrics.distanceKm,
-            caloriesKcal = metrics.caloriesKcal,
-            activeDurationMillis = trackedDurationMillis,
-            routePolyline = WearRouteCodec.encode(metrics.route).takeIf { it.isNotBlank() },
-        )
-        runCatching { app.dataGateway.sendCompletedWorkout(workout) }
-            .onSuccess {
-                stopTabataTimer()
-                app.store.clearActiveSession()
-                if (metrics.tracking) {
-                    ContextCompat.startForegroundService(
-                        app,
-                        WearExerciseService.command(app, WearExerciseService.ACTION_STOP),
-                    )
-                }
-                message.value = "휴대폰 전송 대기열에 저장했습니다."
+        if (workoutFinishInProgress) return@launch
+        var active = state.value.active ?: return@launch
+        workoutFinishInProgress = true
+        try {
+            val endedAt = active.finishedAt ?: System.currentTimeMillis()
+            active = active.copy(finishedAt = endedAt, paused = true, pausedAt = active.pausedAt ?: endedAt)
+            app.store.saveActiveSession(active)
+            message.value = "마지막 센서 기록을 저장하고 있습니다…"
+            if (WearMetricsRepository.metrics.value.tracking) {
+                ContextCompat.startForegroundService(app, WearExerciseService.command(app, WearExerciseService.ACTION_STOP))
+                withTimeout(60_000L) { WearMetricsRepository.metrics.first { !it.tracking } }
             }
-            .onFailure { message.value = it.message ?: "운동 저장에 실패했습니다." }
+            val telemetry = app.sensorRecorder.snapshot(active.sessionId)
+            val metrics = withContext(Dispatchers.Default) { WearMetricsRepository.metrics.value.withTelemetryFallback(telemetry) }
+            val trackedDurationMillis = metrics.activeDurationMillis.takeIf { it > 0L }
+                ?: active.elapsedMillis(endedAt)
+            val elapsedMinutes = trackedDurationMillis / 60_000.0
+            var cardioRecorded = false
+            val exercises = active.exercises.map { exercise ->
+                if (exercise.recordMode == WearRecordMode.CARDIO && !cardioRecorded) {
+                    cardioRecorded = true
+                    exercise.copy(durationMin = elapsedMinutes, distanceKm = metrics.distanceKm)
+                } else exercise
+            }
+            val workout = WearCompletedWorkout(
+                sessionId = active.sessionId,
+                routineId = active.routine.routineId,
+                planSlotId = active.routine.planSlotId,
+                title = active.routine.title,
+                startedAt = active.startedAt,
+                endedAt = endedAt,
+                exercises = exercises,
+                averageHeartRateBpm = metrics.averageHeartRateBpm,
+                distanceKm = metrics.distanceKm,
+                caloriesKcal = metrics.caloriesKcal,
+                activeDurationMillis = trackedDurationMillis,
+                routePolyline = WearRouteCodec.encode(metrics.route).takeIf { it.isNotBlank() },
+                telemetry = telemetry,
+            )
+            runCatching { withContext(Dispatchers.IO) { app.dataGateway.sendCompletedWorkout(workout) } }
+                .onSuccess {
+                    app.store.clearActiveSession()
+                    runCatching { app.sensorRecorder.removeQueued(active.sessionId) }
+                    message.value = "휴대폰 전송 대기열에 저장했습니다."
+                }
+                .onFailure { message.value = it.message ?: "운동 저장에 실패했습니다." }
+        } catch (error: Exception) {
+            message.value = "기록을 보관 중입니다. 완료를 다시 눌러 주세요. ${error.message.orEmpty()}"
+        } finally {
+            workoutFinishInProgress = false
+        }
     }
 
     fun consumeMessage() { message.value = null }
@@ -415,68 +284,6 @@ class WearMainViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    private fun signalRestComplete() {
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            app.getSystemService(VibratorManager::class.java)?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            app.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
-        }
-        vibrator?.vibrate(VibrationEffect.createWaveform(longArrayOf(0L, 250L, 150L, 350L), -1))
-    }
-
-    private fun signalTabataPhase(phase: TabataPhase) {
-        val pattern = when (phase) {
-            TabataPhase.WORK -> longArrayOf(0L, 150L, 70L, 150L)
-            TabataPhase.REST -> longArrayOf(0L, 280L)
-            TabataPhase.COMPLETED -> longArrayOf(0L, 220L, 100L, 220L, 100L, 420L)
-            else -> return
-        }
-        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            app.getSystemService(VibratorManager::class.java)?.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            app.getSystemService(android.content.Context.VIBRATOR_SERVICE) as? Vibrator
-        }
-        vibrator?.vibrate(VibrationEffect.createWaveform(pattern, -1))
-    }
-
-    private fun stopTabataTimer(targetId: String? = null) {
-        tabataTimerJob?.cancel()
-        tabataTimerJob = null
-        tabataPausedByWorkout = false
-        tabataTimer.value = targetId?.let { TabataTimer.ready(it) } ?: TabataTimerState()
-    }
-
-    private fun updateExercise(
-        exerciseId: String,
-        transform: (com.hanshin.healthtask.shared.WearRoutineExercise) -> com.hanshin.healthtask.shared.WearRoutineExercise,
-    ) = viewModelScope.launch { updateExerciseNow(exerciseId, transform) }
-
-    private suspend fun updateExerciseNow(
-        exerciseId: String?,
-        transform: (com.hanshin.healthtask.shared.WearRoutineExercise) -> com.hanshin.healthtask.shared.WearRoutineExercise,
-    ) {
-        val active = state.value.active ?: return
-        app.store.saveActiveSession(active.copy(exercises = active.exercises.map { exercise ->
-            if (exercise.id == exerciseId) transform(exercise) else exercise
-        }))
-    }
-
-    private fun updateFocusedSet(transform: (WearRoutineSet) -> WearRoutineSet) = updateActive { active ->
-        active.updateCurrentExercise { exercise ->
-            val focus = exercise.sets.firstOrNull { !it.completed } ?: exercise.sets.lastOrNull()
-                ?: return@updateCurrentExercise exercise
-            exercise.copy(sets = exercise.sets.map { if (it.order == focus.order) transform(it) else it })
-        }
-    }
-
-    private fun updateActive(transform: (WearActiveSession) -> WearActiveSession) {
-        viewModelScope.launch {
-            val active = state.value.active ?: return@launch
-            app.store.saveActiveSession(transform(active))
-        }
-    }
 }
 
 internal fun startRequestExpiryDelayMillis(
@@ -490,15 +297,9 @@ internal fun isWorkoutStartCurrent(
     pendingRequest: WearStartWorkoutRequest?,
     now: Long = System.currentTimeMillis(),
 ): Boolean {
-    if (active != null) return false
-    val liveRequest = pendingRequest?.takeIf { it.isValid(now) }
+    if (!candidate.routine.usesGpsRunning || active != null) return false
+    val liveRequest = pendingRequest?.takeIf { it.isValid(now) && it.routine.usesGpsRunning }
     if (candidate.requestId == null) return candidate.sessionId == null && liveRequest == null
     if (candidate.sessionId.isNullOrBlank()) return false
     return liveRequest?.requestId == candidate.requestId && liveRequest.sessionId == candidate.sessionId
 }
-
-private fun WearActiveSession.updateCurrentExercise(
-    transform: (com.hanshin.healthtask.shared.WearRoutineExercise) -> com.hanshin.healthtask.shared.WearRoutineExercise,
-): WearActiveSession = copy(exercises = exercises.mapIndexed { index, exercise ->
-    if (index == currentExerciseIndex) transform(exercise) else exercise
-})

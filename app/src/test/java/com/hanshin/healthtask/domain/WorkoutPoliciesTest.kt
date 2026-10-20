@@ -1,6 +1,5 @@
 package com.hanshin.healthtask.domain
 
-import com.hanshin.healthtask.data.db.SamsungWorkoutLinkEntity
 import com.hanshin.healthtask.data.db.SetRecordEntity
 import com.hanshin.healthtask.data.db.WorkoutItemEntity
 import com.hanshin.healthtask.data.db.WorkoutItemWithSets
@@ -16,38 +15,6 @@ import org.junit.Test
 class WorkoutPoliciesTest {
     private val today = LocalDate.now()
     private val start = today.atTime(10, 0).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-
-    @Test fun `ten minute Samsung workout counts but nine minute workout does not`() {
-        val short = session("short", WorkoutSource.SAMSUNG_HEALTH, start, start + 9 * 60_000)
-        val enough = session("enough", WorkoutSource.SAMSUNG_HEALTH, start, start + 10 * 60_000)
-        assertEquals(1, weeklyGoalCount(listOf(short, enough), emptyList(), today))
-    }
-
-    @Test fun `linked local and Samsung workouts count once`() {
-        val local = session("local", WorkoutSource.LOCAL, start, start + 30 * 60_000, "routine-a")
-        val external = session("external", WorkoutSource.SAMSUNG_HEALTH, start, start + 31 * 60_000)
-        val link = SamsungWorkoutLinkEntity("link", local.id, external.id, .96)
-        assertEquals(1, weeklyGoalCount(listOf(local, external), listOf(link), today))
-    }
-
-    @Test fun `unlinked NRC run counts toward weekly goal`() {
-        val run = session("nike-run", WorkoutSource.NIKE_RUN_CLUB, start, start + 30 * 60_000)
-        assertEquals(1, weeklyGoalCount(listOf(run), emptyList(), today))
-    }
-
-    @Test fun `Samsung workout never advances routine order`() {
-        val samsung = session("external", WorkoutSource.SAMSUNG_HEALTH, start, start + 40 * 60_000)
-        assertEquals(0, nextRoutineIndex(listOf(samsung), 3))
-        val local = session("local", WorkoutSource.LOCAL, start, start + 40 * 60_000, "routine-a")
-        assertEquals(1, nextRoutineIndex(listOf(samsung, local), 3))
-    }
-
-    @Test fun `routine order restarts on Sunday week boundary`() {
-        val lastWeekDate = today.minusWeeks(1)
-        val old = session("old", WorkoutSource.LOCAL, start, start + 40 * 60_000, "routine")
-            .copy(sessionDate = lastWeekDate.toString())
-        assertEquals(0, nextRoutineIndex(listOf(old), 3, today))
-    }
 
     @Test fun `automatic link requires seventy percent of shorter duration and best candidate wins`() {
         val samsung = session("samsung", WorkoutSource.SAMSUNG_HEALTH, start, start + 30 * 60_000)

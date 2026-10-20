@@ -10,12 +10,10 @@ import com.google.android.gms.wearable.DataClient
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.gson.Gson
-import com.hanshin.healthtask.data.db.ExerciseEntity
-import com.hanshin.healthtask.data.db.RoutineWithItems
-import com.hanshin.healthtask.data.db.WorkoutSessionWithItems
-import com.hanshin.healthtask.data.db.PlanSlotEntity
 import com.hanshin.healthtask.shared.WearPaths
 import com.hanshin.healthtask.shared.WearStartWorkoutRequest
+import com.hanshin.healthtask.shared.toRoutinePayload
+import com.hanshin.healthtask.shared.usesGpsRunning
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -35,24 +33,8 @@ class PhoneWatchGateway(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val gson = Gson()
 
-    suspend fun publishRoutine(
-        routine: RoutineWithItems?,
-        plannedSlot: PlanSlotEntity?,
-        exercises: List<ExerciseEntity>,
-        sessions: List<WorkoutSessionWithItems>,
-        restTimerSeconds: Int,
-    ) {
-        val payload = buildWearRoutinePayload(
-            routine = routine,
-            plannedSlot = plannedSlot,
-            exercises = exercises,
-            sessions = sessions,
-            restTimerSeconds = restTimerSeconds,
-        )
-        if (payload == null) {
-            dataClient.deleteDataItems("wear://*${WearPaths.TODAY_ROUTINE}".toUri(), DataClient.FILTER_LITERAL).await()
-            return
-        }
+    suspend fun publishRunningPreset() {
+        val payload = com.hanshin.healthtask.shared.WearQuickRunPreset.FREE_RUN.toRoutinePayload()
         val request = PutDataMapRequest.create(WearPaths.TODAY_ROUTINE).apply {
             dataMap.putString(WearPaths.KEY_JSON, gson.toJson(payload))
             dataMap.putLong(WearPaths.KEY_UPDATED_AT, payload.updatedAt)
@@ -61,6 +43,7 @@ class PhoneWatchGateway(context: Context) {
     }
 
     suspend fun requestWorkoutStart(request: WearStartWorkoutRequest): Boolean = runCatching {
+        require(request.routine.usesGpsRunning) { "러닝만 워치에서 시작할 수 있습니다." }
         require(request.isValid()) { "운동 시작 요청이 올바르지 않거나 만료됐습니다." }
         pruneStartRequests()
         val path = WearPaths.START_WORKOUT_PREFIX + request.requestId

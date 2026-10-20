@@ -21,8 +21,9 @@ android {
         applicationId = "com.hanshin.healthtask"
         minSdk = 30
         targetSdk = 36
-        versionCode = 7
-        versionName = "1.4.2"
+        versionCode = 10
+        versionName = "2.0.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
@@ -66,6 +67,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
     implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.wear.compose:compose-material3:1.6.2")
+    implementation("androidx.wear:wear-ongoing:1.1.0")
     implementation("androidx.health:health-services-client:1.1.0-rc02")
     implementation("com.google.android.gms:play-services-wearable:20.0.1")
     implementation("com.google.code.gson:gson:2.13.2")
@@ -74,4 +76,11 @@ dependencies {
     implementation("com.google.guava:guava:33.4.8-android")
 
     testImplementation("junit:junit:4.13.2")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.00"))
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("androidx.test:core-ktx:1.7.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation(platform("androidx.compose:compose-bom:2026.06.00"))
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

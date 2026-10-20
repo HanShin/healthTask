@@ -42,22 +42,3 @@ fun WearQuickRunPreset.toRoutinePayload(
     updatedAt = updatedAt,
     sensorMode = WearSensorMode.RUNNING,
 )
-
-fun freeWorkoutRoutinePayload(
-    updatedAt: Long = System.currentTimeMillis(),
-): WearRoutinePayload = WearRoutinePayload(
-    routineId = "watch-free-workout",
-    title = "바로 운동",
-    exercises = listOf(
-        WearRoutineExercise(
-            id = "watch-free-workout-exercise",
-            exerciseId = "watch-free-workout",
-            name = "자유 운동",
-            order = 1,
-            recordMode = WearRecordMode.CARDIO,
-            category = "WEIGHT",
-        ),
-    ),
-    updatedAt = updatedAt,
-    sensorMode = WearSensorMode.STRENGTH,
-)

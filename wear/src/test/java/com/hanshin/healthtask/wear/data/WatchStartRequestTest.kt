@@ -16,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import com.hanshin.healthtask.shared.toRoutinePayload
 
 class WatchStartRequestTest {
     private val storeScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -101,6 +102,14 @@ class WatchStartRequestTest {
         )
     }
 
+    @Test fun `old strength request is rejected by decoder and store`() = runBlocking {
+        val run = request("legacy", now, now + 60_000)
+        val legacy = run.copy(routine = run.routine.copy(sensorMode = com.hanshin.healthtask.shared.WearSensorMode.STRENGTH))
+        assertNull(decodeStartWorkoutRequest(gson.toJson(legacy), WearPaths.START_WORKOUT_PREFIX + legacy.requestId, now))
+        store.savePendingStartRequest(legacy, now)
+        assertNull(store.pendingStartRequest.first())
+    }
+
     private fun request(
         requestId: String,
         requestedAt: Long,
@@ -108,12 +117,7 @@ class WatchStartRequestTest {
     ) = WearStartWorkoutRequest(
         requestId = requestId,
         sessionId = "session-$requestId",
-        routine = WearRoutinePayload(
-            routineId = "routine",
-            title = "루틴",
-            exercises = emptyList(),
-            updatedAt = requestedAt,
-        ),
+        routine = com.hanshin.healthtask.shared.WearQuickRunPreset.FREE_RUN.toRoutinePayload(updatedAt = requestedAt),
         requestedAt = requestedAt,
         expiresAt = expiresAt,
     )

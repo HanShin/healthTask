@@ -10,6 +10,7 @@ import com.hanshin.healthtask.health.HealthConnectGateway
 import com.hanshin.healthtask.health.HealthSyncManager
 import com.hanshin.healthtask.running.RunningTracker
 import com.hanshin.healthtask.wear.PhoneWatchGateway
+import com.hanshin.healthtask.wear.WatchWorkoutImporter
 
 class HealthTaskApplication : Application() {
     lateinit var database: HealthTaskDatabase
@@ -28,6 +29,8 @@ class HealthTaskApplication : Application() {
         private set
     lateinit var runningTracker: RunningTracker
         private set
+    lateinit var watchWorkoutImporter: WatchWorkoutImporter
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -39,5 +42,6 @@ class HealthTaskApplication : Application() {
         backupCodec = BackupCodec(database)
         phoneWatchGateway = PhoneWatchGateway(this)
         runningTracker = RunningTracker(this)
+        watchWorkoutImporter = WatchWorkoutImporter(this)
     }
 }

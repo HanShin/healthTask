@@ -11,6 +11,8 @@ class InBodyScreenshotParserTest {
         val result = InBodyScreenshotParser.parse(
             """
             2026.08.24
+            체중 75.2 kg
+            체지방률 19.3 %
             골격근량
             33.4 kg
             체지방량
@@ -25,6 +27,8 @@ class InBodyScreenshotParserTest {
         )
 
         assertEquals(LocalDate.of(2026, 8, 24), result.measuredDate)
+        assertEquals(75.2, result.values[HealthMetricType.WEIGHT_KG]!!, 0.001)
+        assertEquals(19.3, result.values[HealthMetricType.BODY_FAT_PERCENT]!!, 0.001)
         assertEquals(33.4, result.values[HealthMetricType.SKELETAL_MUSCLE_KG]!!, 0.001)
         assertEquals(14.5, result.values[HealthMetricType.BODY_FAT_MASS_KG]!!, 0.001)
         assertEquals(null, result.values[HealthMetricType.BODY_WATER_L])
@@ -37,6 +41,8 @@ class InBodyScreenshotParserTest {
         val result = InBodyScreenshotParser.parse(
             """
             2026/8/25
+            Weight 70.0 kg
+            Percent Body Fat 18.8 %
             Skeletal Muscle Mass 31.8 kg
             Body Fat Mass 13.2 kg
             Total Body Water 40.7 L
@@ -46,6 +52,8 @@ class InBodyScreenshotParserTest {
         )
 
         assertEquals(LocalDate.of(2026, 8, 25), result.measuredDate)
+        assertEquals(70.0, result.values[HealthMetricType.WEIGHT_KG]!!, 0.001)
+        assertEquals(18.8, result.values[HealthMetricType.BODY_FAT_PERCENT]!!, 0.001)
         assertEquals(31.8, result.values[HealthMetricType.SKELETAL_MUSCLE_KG]!!, 0.001)
         assertEquals(13.2, result.values[HealthMetricType.BODY_FAT_MASS_KG]!!, 0.001)
         assertEquals(null, result.values[HealthMetricType.BODY_WATER_L])

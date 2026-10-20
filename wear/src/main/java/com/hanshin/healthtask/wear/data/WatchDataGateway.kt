@@ -3,11 +3,13 @@ package com.hanshin.healthtask.wear.data
 import android.content.Context
 import androidx.core.net.toUri
 import com.google.android.gms.wearable.DataClient
+import com.google.android.gms.wearable.Asset
 import com.google.android.gms.wearable.DataMapItem
 import com.google.android.gms.wearable.PutDataMapRequest
 import com.google.android.gms.wearable.Wearable
 import com.google.gson.Gson
 import com.hanshin.healthtask.shared.WearCompletedWorkout
+import com.hanshin.healthtask.shared.RunTelemetryCodec
 import com.hanshin.healthtask.shared.WearPaths
 import com.hanshin.healthtask.shared.WearRoutinePayload
 import com.hanshin.healthtask.shared.WearStartWorkoutRequest
@@ -21,7 +23,9 @@ class WatchDataGateway(context: Context) {
     suspend fun sendCompletedWorkout(workout: WearCompletedWorkout) {
         val path = WearPaths.COMPLETED_WORKOUT_PREFIX + workout.sessionId
         val request = PutDataMapRequest.create(path).apply {
-            dataMap.putString(WearPaths.KEY_JSON, gson.toJson(workout))
+            // A full run exceeds the DataItem 100 KB limit. Assets are durably queued too.
+            dataMap.putAsset(WearPaths.KEY_WORKOUT_ASSET,
+                Asset.createFromBytes(RunTelemetryCodec.compress(gson.toJson(workout))))
             dataMap.putLong(WearPaths.KEY_UPDATED_AT, workout.endedAt)
         }.asPutDataRequest().setUrgent()
         dataClient.putDataItem(request).await()

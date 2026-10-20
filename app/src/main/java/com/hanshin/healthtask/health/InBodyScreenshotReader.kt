@@ -54,6 +54,8 @@ object InBodyScreenshotParser {
     )
 
     private val metricDefinitions = listOf(
+        MetricDefinition(HealthMetricType.WEIGHT_KG, listOf("체중", "weight"), 2.0..350.0),
+        MetricDefinition(HealthMetricType.BODY_FAT_PERCENT, listOf("체지방률", "체지방율", "percentbodyfat", "bodyfatpercentage", "pbf"), 1.0..100.0),
         MetricDefinition(
             HealthMetricType.SKELETAL_MUSCLE_KG,
             listOf("골격근량", "skeletalmusclemass", "smm"),
