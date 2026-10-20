@@ -128,7 +128,7 @@ class CloudSync(private val app: HealthTaskApplication) {
     fun recordError(message: String) { preferences.edit().putString("error", message).apply() }
 
     private suspend fun post(path: String, payload: JsonObject, bearer: String?): JsonObject = withContext(Dispatchers.IO) {
-        val builder = Request.Builder().url("https://hykgvrbsvldrjdoxxlnl.supabase.co/functions/v1/$path")
+        val builder = Request.Builder().url("https://mwwrnhhbippprmidgaus.supabase.co/functions/v1/$path")
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
         if (bearer != null) builder.header("Authorization", "Bearer $bearer")
         client.newCall(builder.build()).execute().use { response ->
