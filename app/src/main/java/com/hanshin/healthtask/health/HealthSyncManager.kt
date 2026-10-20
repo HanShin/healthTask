@@ -35,6 +35,7 @@ class HealthSyncManager(
     private val database: HealthTaskDatabase,
     private val gateway: HealthConnectGateway,
     private val preferences: AppPreferences,
+    private val onCloudChanged: () -> Unit = {},
 ) {
     private val syncMutex = Mutex()
 
@@ -42,15 +43,26 @@ class HealthSyncManager(
         if (!force && !preferences.sync.first().enabled) return SyncResult()
         val healthConnected = gateway.status() == HealthConnectStatus.CONNECTED
         if (!healthConnected) {
+            onCloudChanged()
             return SyncResult(error = "Health Connect 연결이 필요합니다.")
         }
         return try {
             val uploaded = uploadPending()
-            val changesToken = database.dao().getSyncState(CHANGES_TOKEN)?.value
+            val signature = gateway.permissionSignature()
+            val changesToken = if (database.dao().getSyncState("cloud_permission_signature")?.value == signature) database.dao().getSyncState(CHANGES_TOKEN)?.value else null
             val snapshot = gateway.readHealthConnectData(changesToken)
             var linked = 0
             database.withTransaction {
                 val dao = database.dao()
+                if (snapshot.fullSnapshot) {
+                    val presentIds = snapshot.cloudRecords.mapTo(hashSetOf()) { it.get("externalId").asString }
+                    // This full read covers EPOCH..now with history permission. Never reconcile revoked types.
+                    dao.getCloudHealthRecords().forEach { cached ->
+                        val record = com.google.gson.JsonParser.parseString(cached.value).asJsonObject
+                        val metric = record.getAsJsonObject("data").get("metric").asString
+                        if (metric in snapshot.reconciledCloudMetrics && record.get("externalId").asString !in presentIds) dao.deleteSyncState(cached.key)
+                    }
+                }
                 snapshot.deletedRecordIds.forEach { recordId ->
                     dao.getSessionByHealthRecord(recordId)?.takeIf { it.source.isExternal() }?.let { session ->
                         dao.deleteWorkoutLinkForSamsungSession(session.id)
@@ -59,6 +71,11 @@ class HealthSyncManager(
                         dao.deleteSession(session.id)
                     }
                     dao.deleteHealthMeasurementsByExternalRecord(recordId)
+                    dao.deleteSyncState("health_cloud:$recordId")
+                }
+                dao.upsertSyncState(SyncStateEntity("cloud_permission_signature", signature))
+                snapshot.cloudRecords.forEach { record ->
+                    dao.upsertSyncState(SyncStateEntity("health_cloud:${record.get("externalId").asString}", record.toString()))
                 }
                 snapshot.workouts.filter { it.isRunning }.forEach { record ->
                     val id = externalSessionId(record)
@@ -135,6 +152,7 @@ class HealthSyncManager(
                 snapshot.nextChangesToken?.let { dao.upsertSyncState(SyncStateEntity(CHANGES_TOKEN, it)) }
             }
             preferences.markSynced()
+            onCloudChanged()
             SyncResult(uploaded, snapshot.workouts.count { it.isRunning }, snapshot.measurements.size, linked)
         } catch (error: Throwable) {
             database.dao().upsertSyncState(SyncStateEntity("last_error", error.message ?: error.javaClass.simpleName))
@@ -190,6 +208,6 @@ class HealthSyncManager(
     }
 
     private companion object {
-        const val CHANGES_TOKEN = "health_running_changes_token_v3"
+        const val CHANGES_TOKEN = "health_running_changes_token_v4"
     }
 }

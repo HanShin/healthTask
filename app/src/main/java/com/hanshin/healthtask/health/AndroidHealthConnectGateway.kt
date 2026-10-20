@@ -10,6 +10,11 @@ import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.HeartRateRecord
+import com.google.gson.JsonObject
+import com.google.gson.JsonArray
 import androidx.health.connect.client.records.Record
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
 import androidx.health.connect.client.records.WeightRecord
@@ -44,14 +49,30 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         HealthPermission.getWritePermission(DistanceRecord::class),
         HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
         HealthPermission.PERMISSION_READ_HEALTH_DATA_HISTORY,
+        HealthPermission.getReadPermission(SleepSessionRecord::class),
+        HealthPermission.getReadPermission(StepsRecord::class),
+        HealthPermission.getReadPermission(HeartRateRecord::class),
     )
+
+    override suspend fun permissionSignature(): String = client.permissionController.getGrantedPermissions().sorted().joinToString("|")
+
+    override suspend fun cloudAllowedMetrics(): Set<String> {
+        if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) return emptySet()
+        val granted = client.permissionController.getGrantedPermissions()
+        return mapOf(
+            HealthPermission.getReadPermission(SleepSessionRecord::class) to "sleep",
+            HealthPermission.getReadPermission(StepsRecord::class) to "steps",
+            HealthPermission.getReadPermission(HeartRateRecord::class) to "heart_rate",
+        ).filterKeys { it in granted }.values.toSet()
+    }
 
     override suspend fun status(): HealthConnectStatus {
         if (HealthConnectClient.getSdkStatus(context) != HealthConnectClient.SDK_AVAILABLE) {
             return HealthConnectStatus.UNAVAILABLE
         }
         val granted = client.permissionController.getGrantedPermissions()
-        return if (granted.containsAll(requiredPermissions)) HealthConnectStatus.CONNECTED
+        val optional = setOf(HealthPermission.getReadPermission(SleepSessionRecord::class), HealthPermission.getReadPermission(StepsRecord::class), HealthPermission.getReadPermission(HeartRateRecord::class))
+        return if (granted.containsAll(requiredPermissions - optional)) HealthConnectStatus.CONNECTED
         else HealthConnectStatus.PERMISSIONS_REQUIRED
     }
 
@@ -60,7 +81,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         val origins = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE), DataOrigin(NIKE_RUN_CLUB_PACKAGE))
         if (changesToken != null) return readChanges(changesToken).withRecentNikeRuns()
         val nextToken = client.getChangesToken(ChangesTokenRequest(
-            recordTypes = setOf(ExerciseSessionRecord::class, WeightRecord::class, BodyFatRecord::class),
+            recordTypes = setOf(ExerciseSessionRecord::class, WeightRecord::class, BodyFatRecord::class) + optionalRecordTypes(),
             dataOriginFilters = origins,
         ))
         val range = TimeRangeFilter.between(Instant.EPOCH, Instant.now().plusSeconds(1))
@@ -68,7 +89,14 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         val samsungOrigin = setOf(DataOrigin(SAMSUNG_HEALTH_PACKAGE))
         val weights = readAll(WeightRecord::class, range, samsungOrigin).map(::toMeasurement)
         val bodyFat = readAll(BodyFatRecord::class, range, samsungOrigin).map(::toMeasurement)
-        return HealthConnectSnapshot(workouts, weights + bodyFat, nextChangesToken = nextToken)
+        val cloud = mutableListOf<JsonObject>()
+        val types = optionalRecordTypes()
+        if (SleepSessionRecord::class in types) cloud += readAll(SleepSessionRecord::class, range, samsungOrigin).map(::cloudRecord)
+        if (StepsRecord::class in types) cloud += readAll(StepsRecord::class, range, samsungOrigin).map(::cloudRecord)
+        if (HeartRateRecord::class in types) cloud += readAll(HeartRateRecord::class, range, samsungOrigin).map(::cloudRecord)
+        val readMetrics = mapOf(SleepSessionRecord::class to "sleep", StepsRecord::class to "steps", HeartRateRecord::class to "heart_rate")
+            .filterKeys { it in types }.values.toSet().intersect(cloudAllowedMetrics())
+        return HealthConnectSnapshot(workouts, weights + bodyFat, nextChangesToken = nextToken, cloudRecords = cloud, fullSnapshot = true, reconciledCloudMetrics = readMetrics)
     }
 
     override suspend fun writeWorkout(summary: WorkoutSummary): String {
@@ -123,7 +151,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
                 pageToken = token,
             ))
             result += response.records
-            token = response.pageToken
+            token = response.pageToken?.takeIf { it.isNotBlank() }
         } while (token != null)
         return result
     }
@@ -132,6 +160,7 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         val workouts = mutableListOf<ExternalWorkout>()
         val measurements = mutableListOf<ExternalHealthMeasurement>()
         val deleted = mutableSetOf<String>()
+        val cloud = mutableListOf<JsonObject>()
         var token = initialToken
         var hasMore: Boolean
         do {
@@ -144,13 +173,14 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
                         is ExerciseSessionRecord -> if (isRunningType(record.exerciseType)) workouts += toWorkout(record)
                         is WeightRecord -> measurements += toMeasurement(record)
                         is BodyFatRecord -> measurements += toMeasurement(record)
+                        is SleepSessionRecord, is StepsRecord, is HeartRateRecord -> if (record.metadata.dataOrigin.packageName == SAMSUNG_HEALTH_PACKAGE) cloud += cloudRecord(record)
                     }
                 }
             }
             token = response.nextChangesToken
             hasMore = response.hasMore
         } while (hasMore)
-        return HealthConnectSnapshot(workouts, measurements, deleted, token)
+        return HealthConnectSnapshot(workouts, measurements, deleted, token, cloud)
     }
 
     private suspend fun HealthConnectSnapshot.withRecentNikeRuns(): HealthConnectSnapshot {
@@ -208,6 +238,48 @@ class AndroidHealthConnectGateway(private val context: Context) : HealthConnectG
         measuredAt = record.time,
         sourcePackage = record.metadata.dataOrigin.packageName,
     )
+
+    private suspend fun optionalRecordTypes(): Set<kotlin.reflect.KClass<out Record>> {
+        val granted = client.permissionController.getGrantedPermissions()
+        return setOf(SleepSessionRecord::class, StepsRecord::class, HeartRateRecord::class)
+            .filterTo(mutableSetOf()) { HealthPermission.getReadPermission(it) in granted }
+    }
+
+    private fun cloudRecord(record: Record): JsonObject {
+        val data = JsonObject().apply { addProperty("sourcePackage", record.metadata.dataOrigin.packageName) }
+        val start: Instant
+        val end: Instant
+        when (record) {
+            is SleepSessionRecord -> {
+                start = record.startTime; end = record.endTime
+                data.addProperty("metric", "sleep"); data.addProperty("unit", "seconds")
+                data.addProperty("value", Duration.between(start, end).seconds)
+                data.addProperty("durationBasis", "session_window")
+                data.add("stages", JsonArray().apply { record.stages.forEach { stage -> add(JsonObject().apply {
+                    addProperty("startTime", stage.startTime.toString()); addProperty("endTime", stage.endTime.toString()); addProperty("stage", stage.stage)
+                }) } })
+            }
+            is StepsRecord -> {
+                start = record.startTime; end = record.endTime
+                data.addProperty("metric", "steps"); data.addProperty("unit", "steps"); data.addProperty("value", record.count)
+            }
+            is HeartRateRecord -> {
+                start = record.startTime; end = record.endTime
+                data.addProperty("metric", "heart_rate"); data.addProperty("unit", "bpm")
+                data.add("samples", JsonArray().apply { record.samples.forEach { sample -> add(JsonObject().apply {
+                    addProperty("time", sample.time.toString()); addProperty("beatsPerMinute", sample.beatsPerMinute)
+                }) } })
+            }
+            else -> error("Unsupported cloud record")
+        }
+        data.addProperty("startTime", start.toString()); data.addProperty("endTime", end.toString())
+        return JsonObject().apply {
+            addProperty("source", "health_connect"); addProperty("externalId", record.metadata.id)
+            addProperty("kind", "measurement"); addProperty("measuredAt", start.toString())
+            addProperty("updatedAt", record.metadata.lastModifiedTime.toString())
+            addProperty("timezone", ZoneId.systemDefault().id); add("data", data)
+        }
+    }
 
     private fun isRunningType(type: Int): Boolean =
         type == ExerciseSessionRecord.EXERCISE_TYPE_RUNNING ||

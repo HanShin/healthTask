@@ -195,6 +195,12 @@ interface HealthTaskDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSyncState(value: SyncStateEntity)
 
+    @Query("SELECT * FROM sync_state WHERE `key` LIKE 'health_cloud:%'")
+    suspend fun getCloudHealthRecords(): List<SyncStateEntity>
+
+    @Query("DELETE FROM sync_state WHERE `key` = :key")
+    suspend fun deleteSyncState(key: String)
+
     @Query("DELETE FROM profiles") suspend fun clearProfiles()
     @Query("DELETE FROM exercises") suspend fun clearExercises()
     @Query("DELETE FROM routines") suspend fun clearRoutines()

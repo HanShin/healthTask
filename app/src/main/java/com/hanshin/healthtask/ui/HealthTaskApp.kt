@@ -760,6 +760,11 @@ private fun InBodyReviewDialog(
 @Composable
 private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
     val context = LocalContext.current
+    val cloudStatus by vm.cloudStatus.collectAsStateWithLifecycle()
+    var cloudCode by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        while (true) { vm.refreshCloudStatus(); kotlinx.coroutines.delay(5_000) }
+    }
     val permissionLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) { vm.sync(force = true) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri -> uri?.let { vm.exportBackup(context.contentResolver, it) } }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let { vm.importBackup(context.contentResolver, it) } }
@@ -810,7 +815,7 @@ private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
                 Spacer(Modifier.height(14.dp))
                 StatusPill(healthStatusLabel(state.healthStatus))
                 Spacer(Modifier.height(12.dp))
-                Text("러닝과 체성분만 연결합니다. GPS 기록은 연결 없이도 사용할 수 있어요.",
+                Text("러닝·체성분과 허용한 수면·걸음·심박을 연결합니다. GPS 기록은 연결 없이도 사용할 수 있어요.",
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -824,11 +829,11 @@ private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
                 Text("최근 동기화 · ${state.syncPreferences.lastSyncAt?.let(::formatTime) ?: "아직 없음"}",
                     style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                if (state.healthStatus != HealthConnectStatus.CONNECTED) {
+                if (state.healthStatus != HealthConnectStatus.UNAVAILABLE) {
                     Button(onClick = { permissionLauncher.launch(vm.requiredPermissions) }, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Rounded.Link, null)
                         Spacer(Modifier.width(6.dp))
-                        Text("권한 연결")
+                        Text("권한 연결 · 추가 항목 허용")
                     }
                 }
                 OutlinedButton(onClick = { vm.sync(force = true) }, modifier = Modifier.fillMaxWidth()) {
@@ -841,6 +846,22 @@ private fun SettingsPage(state: MainUiState, vm: MainViewModel) {
                     Spacer(Modifier.width(6.dp))
                     Text("Health Connect 권한 관리")
                 }
+            }
+        }
+        item {
+            AppCard {
+                Text("health-web 클라우드 연결", style = MaterialTheme.typography.titleMedium)
+                Text(cloudStatus, style = MaterialTheme.typography.bodySmall)
+                Spacer(Modifier.height(10.dp))
+                Text("웹의 연결·설정에서 발급한 일회용 코드를 붙여넣으세요. 연결 후 러닝·인바디·권한을 허용한 삼성 헬스 기록을 Supabase에 전송합니다.")
+                if (cloudStatus == "연결 안 됨") {
+                    OutlinedTextField(cloudCode, { cloudCode = it.trim() }, label = { Text("일회용 연결 코드") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Button(onClick = { vm.pairCloud(cloudCode); cloudCode = "" }, enabled = cloudCode.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Text("웹 연결 및 전체 기록 전송") }
+                } else {
+                    OutlinedButton(onClick = vm::syncCloud, modifier = Modifier.fillMaxWidth()) { Text("지금 클라우드 전송") }
+                    TextButton(onClick = vm::disconnectCloud, modifier = Modifier.fillMaxWidth()) { Text("연결 해제 · 기기 권한 폐기") }
+                }
+                Text("연결 해제 시 웹의 기존 기록은 보존됩니다. 예약 전송은 네트워크와 Android 백그라운드 실행 정책에 따라 지연될 수 있습니다.", style = MaterialTheme.typography.bodySmall)
             }
         }
         item {

@@ -103,6 +103,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), MainUiState())
 
+    private val cloudStatusState = MutableStateFlow(app.cloudSync.status())
+    val cloudStatus: StateFlow<String> = cloudStatusState
+    fun refreshCloudStatus() { cloudStatusState.value = app.cloudSync.status() }
+    fun pairCloud(code: String) = launchAction {
+        app.cloudSync.pair(code)
+        refreshCloudStatus()
+        message.value = "웹 연결 완료. 전체 기록 전송을 예약했습니다."
+    }
+    fun disconnectCloud() = launchAction {
+        app.cloudSync.disconnect()
+        refreshCloudStatus()
+        message.value = "기기 업로드 권한을 폐기했습니다. 웹에 저장된 기록은 유지됩니다."
+    }
+    fun syncCloud() {
+        com.hanshin.healthtask.cloud.CloudSync.enqueue(app)
+        message.value = "네트워크가 연결되면 클라우드 전송을 시작합니다."
+    }
+
     val requiredPermissions get() = app.healthConnect.requiredPermissions
 
     fun setInBodyGraphPreferences(value: InBodyGraphPreferences) = launchAction { app.preferences.setInBodyGraphs(value) }
@@ -289,6 +307,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun sync(force: Boolean = false) = launchAction(showSuccess = false) {
         val result = app.syncManager.sync(force)
+        com.hanshin.healthtask.cloud.CloudSync.enqueue(app)
         refreshConnectionStatuses()
         message.value = result.message()
     }

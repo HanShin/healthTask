@@ -11,10 +11,15 @@ data class HealthConnectSnapshot(
     val measurements: List<ExternalHealthMeasurement>,
     val deletedRecordIds: Set<String> = emptySet(),
     val nextChangesToken: String? = null,
+    val cloudRecords: List<com.google.gson.JsonObject> = emptyList(),
+    val fullSnapshot: Boolean = false,
+    val reconciledCloudMetrics: Set<String> = emptySet(),
 )
 
 interface HealthConnectGateway {
     val requiredPermissions: Set<String>
+    suspend fun permissionSignature(): String = requiredPermissions.sorted().joinToString("|")
+    suspend fun cloudAllowedMetrics(): Set<String> = emptySet()
     suspend fun status(): HealthConnectStatus
     suspend fun readHealthConnectData(changesToken: String? = null): HealthConnectSnapshot
     suspend fun writeWorkout(summary: WorkoutSummary): String

@@ -1,6 +1,9 @@
 package com.hanshin.healthtask
 
 import android.app.Application
+import com.hanshin.healthtask.cloud.CloudSync
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.*
 import com.hanshin.healthtask.data.AppPreferences
 import com.hanshin.healthtask.data.BackupCodec
 import com.hanshin.healthtask.data.HealthTaskRepository
@@ -32,16 +35,27 @@ class HealthTaskApplication : Application() {
     lateinit var watchWorkoutImporter: WatchWorkoutImporter
         private set
 
+    lateinit var cloudSync: CloudSync
+        private set
+    private val cloudScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    @OptIn(FlowPreview::class)
     override fun onCreate() {
         super.onCreate()
         database = HealthTaskDatabase.create(this)
         repository = HealthTaskRepository(database)
         preferences = AppPreferences(this)
         healthConnect = AndroidHealthConnectGateway(this)
-        syncManager = HealthSyncManager(database, healthConnect, preferences)
+        syncManager = HealthSyncManager(database, healthConnect, preferences) { CloudSync.enqueue(this) }
         backupCodec = BackupCodec(database)
         phoneWatchGateway = PhoneWatchGateway(this)
         runningTracker = RunningTracker(this)
         watchWorkoutImporter = WatchWorkoutImporter(this)
+        cloudSync = CloudSync(this)
+        CloudSync.schedule(this)
+        cloudScope.launch {
+            database.invalidationTracker.createFlow("workout_sessions", "workout_items", "set_records", "health_measurements", "inbody_records", "samsung_workout_links", "run_telemetry_chunks", emitInitialState = false)
+                .debounce(2_000).collect { CloudSync.enqueue(this@HealthTaskApplication) }
+        }
     }
 }

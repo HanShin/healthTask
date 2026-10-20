@@ -138,3 +138,7 @@ adb -s WATCH_SERIAL install -r wear/build/outputs/apk/release/wear-release.apk
 ## PWA 보존
 
 전환 직전 웹앱은 Git 태그 `pwa-final-2026-08-21`에 보존되어 있습니다. Android로 가져올 데이터는 기존 PWA 설정에서 JSON을 내보낸 뒤 오늘러닝 설정의 파일 선택기로 불러옵니다.
+
+## health-web 클라우드 연동
+
+설정에서 일회용 코드로 Supabase 기반 health-web에 선택적으로 연결할 수 있습니다. 로컬 기록과 백업은 그대로 유지됩니다. 연결 방법, 전송 형식, Health Connect 추가 권한 및 검증 상태는 [클라우드 동기화 문서](docs/CLOUD_SYNC.md)를 참고하세요.
