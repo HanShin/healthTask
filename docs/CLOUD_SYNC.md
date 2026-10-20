@@ -28,7 +28,9 @@ GitHub의 [Android verification](https://github.com/HanShin/healthTask/actions/w
 
 실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부는 별도로 확인해야 합니다.
 
-다른 PC에서 이어갈 순서:
+최종 [릴리스 포함 원격 검증](https://github.com/HanShin/healthTask/actions/runs/39392953709)은 `f057c2a`에서 단위 테스트 69개(실패·오류·건너뜀 0개), 린트 오류 0개·경고 31개, debug/release APK 빌드가 모두 통과했습니다. 서명 전 release APK를 이 PC의 기존 키로 서명하고 디버그 비활성·16KB ZIP 정렬·새 Supabase 프로젝트 주소를 검증했습니다. USB로 연결된 SM-F766N의 설치 앱도 같은 인증서임을 확인한 뒤 삭제 없이 `adb install -r`로 업데이트했습니다. 설치된 APK 해시는 서명본과 일치하며 최초 설치일은 2026-08-25로 유지됐고 마지막 업데이트는 2026-10-20 17:30:56(한국 시간)입니다. APK는 `app/build/ci-release-f057c2a/healthtask-cloud-sync-release.apk`에 있으며 Git에는 포함하지 않습니다. 실제 기기 코드 연결과 업로드는 이어서 확인합니다.
+
+실기기 업데이트·연결 순서:
 
 1. GitHub 원격 검증을 실행해 서명 전 release APK를 받거나, 기존 개발 PC에서 이 저장소의 `main` 최신 변경 사항을 받고 위 Gradle 검증 명령을 실행합니다.
 2. 휴대폰의 기존 오늘러닝 앱을 삭제하지 말고 앱 내 백업을 먼저 보관합니다. 기존 설치와 같은 서명 키로 업데이트 APK를 만들어야 앱 데이터를 유지할 수 있습니다. 서명 키와 비밀번호는 저장소나 채팅으로 공유하지 않습니다.
