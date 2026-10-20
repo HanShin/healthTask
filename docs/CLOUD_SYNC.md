@@ -20,16 +20,18 @@
 
 `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`를 실행합니다. `CloudRecordsTest`는 JSON 가져오기와 같은 ID, 누락 값, 중복 제외 정보, CSV 원본 보존, 대용량 Unicode 데이터 복원과 배치 제한과 재시도 배치 ID의 안정성을 검증합니다.
 
-GitHub의 [Android verification](https://github.com/HanShin/healthTask/actions/workflows/android.yml)은 `main` 변경과 PR, 수동 실행에서 위 검증을 원격으로 실행합니다. 이 PC에 Android 도구를 설치하지 않습니다. 보고서와 성공한 debug APK는 실행 결과의 Artifacts에서 7일간 받을 수 있습니다. 이 APK는 임시 debug 키로 서명된 테스트용이며 기존 앱 업데이트용이 아닙니다. 기존 앱 업데이트는 아래 절차대로 원래 서명 키가 있는 PC에서 진행합니다. CI는 Supabase 비밀값이나 기존 릴리스 서명 키를 사용하지 않습니다.
+GitHub의 [Android verification](https://github.com/HanShin/healthTask/actions/workflows/android.yml)은 `main` 변경과 PR, 수동 실행에서 위 검증과 `:app:assembleRelease`를 원격으로 실행합니다. 보고서와 성공한 debug APK, 서명 전 release APK는 실행 결과의 Artifacts에서 7일간 받을 수 있습니다. debug APK는 임시 debug 키로 서명된 테스트용이며 기존 앱 업데이트용이 아닙니다. 서명 전 release APK를 기존 키가 있는 PC에서 서명한 후 업데이트합니다. CI는 Supabase 비밀값이나 기존 릴리스 서명 키를 사용하지 않습니다.
 
 2026-10-20에 이 PC에서 준비하던 JDK·Android SDK·Gradle 도구와 실행한 ADB 서버를 정리했고, 로컬 설치 없이 [GitHub 원격 실행](https://github.com/HanShin/healthTask/actions/runs/39391534589)에서 `3aff8e1`을 검증했습니다. 단위 테스트 69개(CloudRecordsTest 4개 포함)·린트·debug APK 빌드가 모두 통과했습니다. 테스트 실패·오류·건너뜀은 0개이고, 린트는 오류 0개·경고 31개입니다. 이 실행은 기존 릴리스 서명 키를 사용하지 않았습니다.
 
-기존 서명 키를 사용하는 업데이트 APK 빌드와 실기기 검증은 사용자 요청에 따라 **다른 PC에서 진행**합니다. JDK 17+ 및 Android SDK 36이 있는 해당 PC에서 검증 명령을 실행한 후, 실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부를 확인해야 합니다.
+사용자가 이 PC에서 휴대폰을 연결했던 이력을 알려준 뒤 다시 확인한 결과, 기존 `~/.android/healthtask-release.jks`와 `~/.gradle/healthtask-signing.properties`가 남아 있었고 이 PC의 기존 release APK와 인증서 지문이 일치했습니다. Android Studio 번들 Java, SDK 서명 도구와 ADB도 남아 있습니다. 따라서 새 키 생성이나 개발 도구 재설치 없이 원격에서 만든 release APK를 이 PC에서 기존 키로 서명할 수 있습니다. 이전의 "이 PC에는 기존 서명 키가 없다"는 안내는 잘못이었습니다. 실제 휴대폰에 설치된 앱과의 서명 비교는 기기 연결 후 진행합니다.
+
+실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부는 별도로 확인해야 합니다.
 
 다른 PC에서 이어갈 순서:
 
-1. 다른 PC에서 이 저장소의 `main` 최신 변경 사항을 받고 위 Gradle 검증 명령을 실행합니다.
-2. 휴대폰의 기존 오늘러닝 앱을 삭제하지 말고 앱 내 백업을 먼저 보관합니다. 기존 설치와 같은 서명 키로 업데이트 APK를 만들어야 앱 데이터를 유지할 수 있습니다. 이 PC에는 기존 릴리스 서명 키가 없습니다. 서명 키와 비밀번호는 저장소나 채팅으로 공유하지 않습니다.
+1. GitHub 원격 검증을 실행해 서명 전 release APK를 받거나, 기존 개발 PC에서 이 저장소의 `main` 최신 변경 사항을 받고 위 Gradle 검증 명령을 실행합니다.
+2. 휴대폰의 기존 오늘러닝 앱을 삭제하지 말고 앱 내 백업을 먼저 보관합니다. 기존 설치와 같은 서명 키로 업데이트 APK를 만들어야 앱 데이터를 유지할 수 있습니다. 서명 키와 비밀번호는 저장소나 채팅으로 공유하지 않습니다.
 3. 서명과 버전을 확인한 뒤 기존 앱 위에 업데이트합니다. 서명이 다르면 설치를 중단하고 기존 빌드 PC의 서명 설정을 확인합니다.
 4. health-web에 OTP로 로그인하고 **연결 · 설정 → 기기 연결 코드 발급**을 누릅니다. 10분 안에 오늘러닝의 **설정 → health-web 클라우드 연결**에 코드를 입력합니다. 웹 주소와 관계없이 앱은 설정된 Supabase 프로젝트로 직접 업로드합니다.
 5. 웹에 기기와 동기화 이력이 나타나는지 확인하고 러닝·인바디 원본 기록 수와 최근 측정값을 대조합니다. 삼성 헬스의 추가 읽기 권한은 휴대폰에서 허용합니다.

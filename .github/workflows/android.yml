@@ -33,8 +33,8 @@ jobs:
         uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           packages: 'platforms;android-36 build-tools;36.0.0'
-      - name: Run phone unit tests, lint and debug build
-        run: ./gradlew --no-daemon --stacktrace --continue --max-workers=2 :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+      - name: Run phone unit tests, lint and APK builds
+        run: ./gradlew --no-daemon --stacktrace --continue --max-workers=2 :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease
       - name: Save verification reports
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -52,5 +52,13 @@ jobs:
         with:
           name: phone-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Save unsigned release APK for local signing
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: phone-unsigned-release-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
           retention-days: 7
