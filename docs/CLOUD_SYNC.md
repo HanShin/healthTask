@@ -22,7 +22,9 @@
 
 GitHub의 [Android verification](https://github.com/HanShin/healthTask/actions/workflows/android.yml)은 `main` 변경과 PR, 수동 실행에서 위 검증을 원격으로 실행합니다. 이 PC에 Android 도구를 설치하지 않습니다. 보고서와 성공한 debug APK는 실행 결과의 Artifacts에서 7일간 받을 수 있습니다. 이 APK는 임시 debug 키로 서명된 테스트용이며 기존 앱 업데이트용이 아닙니다. 기존 앱 업데이트는 아래 절차대로 원래 서명 키가 있는 PC에서 진행합니다. CI는 Supabase 비밀값이나 기존 릴리스 서명 키를 사용하지 않습니다.
 
-Android 빌드와 실기기 검증은 사용자 요청에 따라 **다른 PC에서 진행**합니다. 2026-10-20에 이 PC에서 준비하던 JDK·Android SDK·Gradle 도구와 실행한 ADB 서버를 정리했습니다. 앱 단위 테스트·린트·APK 빌드는 아직 실행하지 않았습니다. JDK 17+ 및 Android SDK 36이 있는 다른 PC에서 위 명령을 실행한 후, 실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부를 확인해야 합니다.
+2026-10-20에 이 PC에서 준비하던 JDK·Android SDK·Gradle 도구와 실행한 ADB 서버를 정리했고, 로컬 설치 없이 [GitHub 원격 실행](https://github.com/HanShin/healthTask/actions/runs/39391534589)에서 `3aff8e1`을 검증했습니다. 단위 테스트 69개(CloudRecordsTest 4개 포함)·린트·debug APK 빌드가 모두 통과했습니다. 테스트 실패·오류·건너뜀은 0개이고, 린트는 오류 0개·경고 31개입니다. 이 실행은 기존 릴리스 서명 키를 사용하지 않았습니다.
+
+기존 서명 키를 사용하는 업데이트 APK 빌드와 실기기 검증은 사용자 요청에 따라 **다른 PC에서 진행**합니다. JDK 17+ 및 Android SDK 36이 있는 해당 PC에서 검증 명령을 실행한 후, 실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부를 확인해야 합니다.
 
 다른 PC에서 이어갈 순서:
 
