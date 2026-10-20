@@ -26,9 +26,11 @@ GitHub의 [Android verification](https://github.com/HanShin/healthTask/actions/w
 
 사용자가 이 PC에서 휴대폰을 연결했던 이력을 알려준 뒤 다시 확인한 결과, 기존 `~/.android/healthtask-release.jks`와 `~/.gradle/healthtask-signing.properties`가 남아 있었고 이 PC의 기존 release APK와 인증서 지문이 일치했습니다. Android Studio 번들 Java, SDK 서명 도구와 ADB도 남아 있습니다. 따라서 새 키 생성이나 개발 도구 재설치 없이 원격에서 만든 release APK를 이 PC에서 기존 키로 서명할 수 있습니다. 이전의 "이 PC에는 기존 서명 키가 없다"는 안내는 잘못이었습니다. 실제 휴대폰에 설치된 앱과의 서명 비교는 기기 연결 후 진행합니다.
 
-실제 기기에서 추가 Health Connect 권한의 부분 허용/철회, 연결 코드 1회 사용, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부, 수면·심박의 실제 공급 여부는 별도로 확인해야 합니다.
+실기기 최초 코드 연결과 실제 업로드, 추가 Health Connect 읽기 권한 허용 및 수면·걸음·심박의 공급·전송을 확인했습니다. 부분 권한 거부/철회, 네트워크 중단 후 재시도, 로컬 기록 삭제, 웹에서 기기 폐기 후 업로드 거부는 추가 회귀 검증 항목입니다.
 
-최종 [릴리스 포함 원격 검증](https://github.com/HanShin/healthTask/actions/runs/39392953709)은 `f057c2a`에서 단위 테스트 69개(실패·오류·건너뜀 0개), 린트 오류 0개·경고 31개, debug/release APK 빌드가 모두 통과했습니다. 서명 전 release APK를 이 PC의 기존 키로 서명하고 디버그 비활성·16KB ZIP 정렬·새 Supabase 프로젝트 주소를 검증했습니다. USB로 연결된 SM-F766N의 설치 앱도 같은 인증서임을 확인한 뒤 삭제 없이 `adb install -r`로 업데이트했습니다. 설치된 APK 해시는 서명본과 일치하며 최초 설치일은 2026-08-25로 유지됐고 마지막 업데이트는 2026-10-20 17:30:56(한국 시간)입니다. APK는 `app/build/ci-release-f057c2a/healthtask-cloud-sync-release.apk`에 있으며 Git에는 포함하지 않습니다. 실제 기기 코드 연결과 업로드는 이어서 확인합니다.
+최종 [릴리스 포함 원격 검증](https://github.com/HanShin/healthTask/actions/runs/39392953709)은 `f057c2a`에서 단위 테스트 69개(실패·오류·건너뜀 0개), 린트 오류 0개·경고 31개, debug/release APK 빌드가 모두 통과했습니다. 서명 전 release APK를 이 PC의 기존 키로 서명하고 디버그 비활성·16KB ZIP 정렬·새 Supabase 프로젝트 주소를 검증했습니다. USB로 연결된 SM-F766N의 설치 앱도 같은 인증서임을 확인한 뒤 삭제 없이 `adb install -r`로 업데이트했습니다. 설치된 APK 해시는 서명본과 일치하며 최초 설치일은 유지됐습니다. APK는 `app/build/ci-release-f057c2a/healthtask-cloud-sync-release.apk`에 있으며 Git에는 포함하지 않습니다.
+
+사용자가 운영 웹의 일회용 코드를 앱에 입력한 뒤 기기 등록과 오늘러닝 배치 업로드가 완료됐습니다. 이어 수면·걸음·심박 읽기를 직접 허용하고 삼성 헬스 동기화를 실행했으며 세 항목의 실제 저장을 확인했습니다. 웹에서 Oura·오늘러닝/인바디·삼성 헬스가 모두 연결됨으로 표시됩니다. 서버에서 분할 원본을 순서대로 재구성해 SHA-256을 계산한 결과 게시된 모든 원본 해시가 일치했습니다. 이 검증에는 권한 상태·집계 건수·완료 상태·해시 일치 여부만 사용했으며 실제 건강 수치나 원본 내용은 출력하지 않았습니다.
 
 실기기 업데이트·연결 순서:
 
